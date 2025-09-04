@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------
+// MODELS
+// ---------------------------
+
+model User {
+  id          Int       @id @default(autoincrement())
+  name        String
+  email       String    @unique
+  password    String
+  role        Role      @default(OPERATOR)
+  assignments Json?
+
+  records     Record[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("users")
+}
+
+model Location {
+  id        Int      @id @default(autoincrement())
+  city      String
+  name      String
+  area      Float
+  lat       Float?
+  lng       Float?
+
+  records   Record[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("locations")
+}
+
+model Record {
+  id            Int      @id @default(autoincrement())
+  operatorId    Int
+  operatorName  String
+  serviceType   String
+  serviceUnit   String
+  locationName  String
+  contractGroup String
+  locationArea  Float?
+  gpsUsed       Boolean  @default(false)
+  startTime     DateTime
+  endTime       DateTime?
+  beforePhotos  String[] @default([])
+  afterPhotos   String[] @default([])
+
+  locationId Int?
+  operator   User      @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  location   Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([startTime, operatorId], map: "idx_records_start_operator")
+  @@map("records")
+}
+
+model Service {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  unit      String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("services")
+}
+
+model Goal {
+  id            Int      @id @default(autoincrement())
+  contractGroup String
+  month         String // "YYYY-MM"
+  targetArea    Float
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([contractGroup, month])
+  @@map("goals")
+}
+
+model AuditLog {
+  id            Int      @id @default(autoincrement())
+  timestamp     DateTime @default(now())
+  adminId       Int
+  adminUsername String
+  action        String
+  recordId      Int
+  details       String
+
+  @@map("audit_logs")
+}
+
+// ---------------------------
+// ENUMS
+// ---------------------------
+
+enum Role {
+  OPERATOR
+  FISCAL
+  ADMIN
+}
