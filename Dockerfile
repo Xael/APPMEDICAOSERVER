@@ -1,26 +1,24 @@
-# Usa uma imagem Node.js leve baseada em Alpine
-FROM node:18-alpine
+# -------- BACKEND (Node + Prisma) --------
+FROM node:18-bullseye-slim
 
-# Define o diretório de trabalho dentro do contêiner
-WORKDIR /usr/src/app
+WORKDIR /app
 
-# Copia package.json e package-lock.json
+# libs necessárias pro Prisma/openssl
+RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# cache de deps
 COPY package*.json ./
-
-# Instala as dependências de produção
 RUN npm install --omit=dev
 
-# Copia o schema do Prisma para gerar o cliente
-COPY prisma ./prisma/
-
-# Gera o cliente Prisma
+# copie prisma antes para gerar client
+COPY prisma ./prisma
 RUN npx prisma generate
 
-# Copia o resto do código do servidor
+# copie o restante do código
 COPY . .
 
-# Expõe a porta que o servidor usa
-EXPOSE 8000
+ENV NODE_ENV=production
+# DATABASE_URL e variáveis vêm do EasyPanel
 
-# Comando para iniciar o servidor (será pego pelo Supervisor do seu ambiente)
-CMD ["npm", "start"]
+# Em runtime: aplica migrações e roda o seed (idempotente), depois sobe o server
+CMD sh -c "npx prisma migrate deploy && npx prisma db seed && node server.js"
