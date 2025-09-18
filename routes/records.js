@@ -148,25 +148,37 @@ router.put('/:id', protect, async (req, res) => {
 // Delete a record
 router.delete('/:id', protect, adminOnly, async (req, res) => {
   try {
-    const recordId = parseInt(req.params.id);
+    const recordId = parseInt(req.params.id, 10);
     const record = await prisma.record.findUnique({ where: { id: recordId } });
 
     if (!record) {
       return res.status(404).json({ message: 'Record not found' });
     }
 
+    // Apaga primeiro
     await prisma.record.delete({ where: { id: recordId } });
 
-    // Create audit log
-    await prisma.auditLog.create({
-      data: {
-        adminId: String(req.user.id),
-        adminUsername: req.user.name,
-        action: 'DELETE',
-        recordId: String(recordId),
-        details: `Registro excluído: ${record.serviceType} em ${record.locationName}, ${record.contractGroup}.`,
-      },
-    });
+    // Tenta registrar log, mas sem quebrar se algum campo vier null
+    try {
+      await prisma.auditLog.create({
+        data: {
+          adminId: String(req.user.id),
+          adminUsername: req.user.name || 'Desconhecido',
+          action: 'DELETE',
+          recordId: String(recordId),
+          details: `Registro excluído: ${record.serviceType || 'N/A'} em ${record.locationName || 'N/A'}, ${record.contractGroup || 'N/A'}.`,
+        },
+      });
+    } catch (logErr) {
+      console.error("Erro ao salvar audit log:", logErr.message);
+    }
+
+    res.status(204).send();
+  } catch (error) {
+    console.error("Erro ao excluir registro:", error);
+    res.status(500).json({ message: 'Error deleting record', error: error.message });
+  }
+});
 
     res.status(204).send();
   } catch (error) {
