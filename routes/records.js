@@ -129,21 +129,41 @@ router.post('/:id/photos', protect, upload.array('files'), async (req, res) => {
     }
 });
 
-// Update a record (e.g., to add endTime)
-router.put('/:id', protect, async (req, res) => {
-    try {
-        const { endTime } = req.body;
-        const updatedRecord = await prisma.record.update({
-            where: { id: parseInt(req.params.id) },
-            data: {
-                endTime: endTime ? new Date(endTime) : null,
-            },
-        });
-        res.json(updatedRecord);
-    } catch (error) {
-        res.status(500).json({ message: 'Error updating record', error: error.message });
-    }
+// Update a record (Admin can edit multiple fields)
+router.put('/:id', protect, adminOnly, async (req, res) => {
+  try {
+    const {
+      locationName,
+      serviceType,
+      serviceUnit,
+      locationArea,
+      contractGroup,
+      gpsUsed,
+      startTime,
+      endTime,
+    } = req.body;
+
+    const updatedRecord = await prisma.record.update({
+      where: { id: parseInt(req.params.id, 10) },
+      data: {
+        locationName,
+        serviceType,
+        serviceUnit,
+        locationArea,
+        contractGroup,
+        gpsUsed,
+        startTime: startTime ? new Date(startTime) : undefined,
+        endTime: endTime ? new Date(endTime) : undefined,
+      },
+    });
+
+    res.json(updatedRecord);
+  } catch (error) {
+    console.error("Erro ao atualizar registro:", error);
+    res.status(500).json({ message: 'Error updating record', error: error.message });
+  }
 });
+
 
 // Delete a record
 router.delete('/:id', protect, adminOnly, async (req, res) => {
