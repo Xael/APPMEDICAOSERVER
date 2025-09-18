@@ -34,7 +34,7 @@ router.get('/', protect, async (req, res) => {
     const formattedRecords = records.map(r => ({
         ...r,
         operatorName: r.operator.name
-    }))
+    }));
 
     res.json(formattedRecords);
   } catch (error) {
@@ -66,8 +66,8 @@ router.get('/:id', protect, async (req, res) => {
 router.post('/', protect, async (req, res) => {
   const { operatorId, serviceType, serviceUnit, locationId, locationName, contractGroup, locationArea, gpsUsed, startTime } = req.body;
   try {
-     const operator = await prisma.user.findUnique({ where: { id: parseInt(operatorId) }});
-     if (!operator) return res.status(404).json({ message: "Operator not found" });
+    const operator = await prisma.user.findUnique({ where: { id: parseInt(operatorId) } });
+    if (!operator) return res.status(404).json({ message: "Operator not found" });
 
     const newRecord = await prisma.record.create({
       data: {
@@ -91,45 +91,45 @@ router.post('/', protect, async (req, res) => {
 
 // Upload photos for a record
 router.post('/:id/photos', protect, upload.array('files'), async (req, res) => {
-    const { id } = req.params;
-    const { phase } = req.body; // 'BEFORE' or 'AFTER'
-    
-    if (!req.files || req.files.length === 0) {
-        return res.status(400).json({ message: 'No files uploaded.' });
+  const { id } = req.params;
+  const { phase } = req.body; // 'BEFORE' or 'AFTER'
+  
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json({ message: 'No files uploaded.' });
+  }
+
+  if (!['BEFORE', 'AFTER'].includes(phase)) {
+    return res.status(400).json({ message: 'Phase must be BEFORE or AFTER.' });
+  }
+
+  try {
+    const record = await prisma.record.findUnique({ where: { id: parseInt(id) } });
+    if (!record) {
+      return res.status(404).json({ message: 'Record not found' });
     }
 
-    if (!['BEFORE', 'AFTER'].includes(phase)) {
-        return res.status(400).json({ message: 'Phase must be BEFORE or AFTER.' });
+    const photoPaths = req.files.map(file => `/uploads/${file.filename}`);
+
+    let updatedRecord;
+    if (phase === 'BEFORE') {
+      updatedRecord = await prisma.record.update({
+        where: { id: parseInt(id) },
+        data: { beforePhotos: { push: photoPaths } },
+      });
+    } else { // AFTER
+      updatedRecord = await prisma.record.update({
+        where: { id: parseInt(id) },
+        data: { afterPhotos: { push: photoPaths } },
+      });
     }
-
-    try {
-        const record = await prisma.record.findUnique({ where: { id: parseInt(id) } });
-        if (!record) {
-            return res.status(404).json({ message: 'Record not found' });
-        }
-
-        const photoPaths = req.files.map(file => `/uploads/${file.filename}`);
-
-        let updatedRecord;
-        if (phase === 'BEFORE') {
-            updatedRecord = await prisma.record.update({
-                where: { id: parseInt(id) },
-                data: { beforePhotos: { push: photoPaths } },
-            });
-        } else { // AFTER
-            updatedRecord = await prisma.record.update({
-                where: { id: parseInt(id) },
-                data: { afterPhotos: { push: photoPaths } },
-            });
-        }
-        res.status(200).json(updatedRecord);
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ message: 'Error uploading photos', error: error.message });
-    }
+    res.status(200).json(updatedRecord);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Error uploading photos', error: error.message });
+  }
 });
 
-// Update a record (Admin can edit multiple fields)
+// Update a record (Admin can edit multiple fields + photos)
 router.put('/:id', protect, adminOnly, async (req, res) => {
   try {
     const {
@@ -141,6 +141,8 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
       gpsUsed,
       startTime,
       endTime,
+      beforePhotos,
+      afterPhotos
     } = req.body;
 
     const updatedRecord = await prisma.record.update({
@@ -154,6 +156,8 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
         gpsUsed,
         startTime: startTime ? new Date(startTime) : undefined,
         endTime: endTime ? new Date(endTime) : undefined,
+        beforePhotos: beforePhotos ?? undefined,
+        afterPhotos: afterPhotos ?? undefined,
       },
     });
 
@@ -163,7 +167,6 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
     res.status(500).json({ message: 'Error updating record', error: error.message });
   }
 });
-
 
 // Delete a record
 router.delete('/:id', protect, adminOnly, async (req, res) => {
@@ -196,12 +199,6 @@ router.delete('/:id', protect, adminOnly, async (req, res) => {
     res.status(204).send();
   } catch (error) {
     console.error("Erro ao excluir registro:", error);
-    res.status(500).json({ message: 'Error deleting record', error: error.message });
-  }
-});
-
-    res.status(204).send();
-  } catch (error) {
     res.status(500).json({ message: 'Error deleting record', error: error.message });
   }
 });
