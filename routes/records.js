@@ -4,9 +4,10 @@ const { PrismaClient } = require('@prisma/client');
 const { protect, adminOnly } = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs').promises; // Módulo para manipulação de arquivos
 const prisma = new PrismaClient();
 
-// Multer storage configuration
+// Configuração do Multer (armazenamento de arquivos)
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, 'uploads/');
@@ -19,7 +20,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-// Get all records
+// Rota para buscar todos os registros
 router.get('/', protect, async (req, res) => {
   try {
     const { operatorId } = req.query;
@@ -31,9 +32,10 @@ router.get('/', protect, async (req, res) => {
       include: { operator: { select: { name: true } } },
     });
     
+    // CORRIGIDO: Acesso seguro ao nome do operador para evitar erro 500
     const formattedRecords = records.map(r => ({
         ...r,
-        operatorName: r.operator.name
+        operatorName: r.operator?.name || 'Operador Deletado'
     }));
 
     res.json(formattedRecords);
@@ -42,7 +44,7 @@ router.get('/', protect, async (req, res) => {
   }
 });
 
-// Get single record
+// Rota para buscar um único registro
 router.get('/:id', protect, async (req, res) => {
   try {
     const record = await prisma.record.findUnique({
@@ -51,9 +53,10 @@ router.get('/:id', protect, async (req, res) => {
     });
     if (!record) return res.status(404).json({ message: 'Record not found' });
     
+    // CORRIGIDO: Acesso seguro ao nome do operador para evitar erro 500
     const formattedRecord = {
         ...record,
-        operatorName: record.operator.name
+        operatorName: record.operator?.name || 'Operador Deletado'
     };
 
     res.json(formattedRecord);
@@ -62,7 +65,7 @@ router.get('/:id', protect, async (req, res) => {
   }
 });
 
-// Create a new record (initial step)
+// Rota para criar um novo registro
 router.post('/', protect, async (req, res) => {
   const { operatorId, serviceType, serviceUnit, locationId, locationName, contractGroup, locationArea, gpsUsed, startTime } = req.body;
   try {
@@ -89,7 +92,7 @@ router.post('/', protect, async (req, res) => {
   }
 });
 
-// Upload photos for a record
+// Rota para fazer upload de fotos para um registro
 router.post('/:id/photos', protect, upload.array('files'), async (req, res) => {
   const { id } = req.params;
   const { phase } = req.body; // 'BEFORE' or 'AFTER'
@@ -119,7 +122,10 @@ router.post('/:id/photos', protect, upload.array('files'), async (req, res) => {
     } else { // AFTER
       updatedRecord = await prisma.record.update({
         where: { id: parseInt(id) },
-        data: { afterPhotos: { push: photoPaths } },
+        data: { 
+            afterPhotos: { push: photoPaths },
+            endTime: new Date() // Define a data de fim ao enviar fotos "Depois"
+        },
       });
     }
     res.status(200).json(updatedRecord);
@@ -129,31 +135,41 @@ router.post('/:id/photos', protect, upload.array('files'), async (req, res) => {
   }
 });
 
-// Update a record (Admin can edit multiple fields + photos)
+// Rota para atualizar um registro (Admin)
 router.put('/:id', protect, adminOnly, async (req, res) => {
   try {
+    const recordId = parseInt(req.params.id, 10);
     const {
-      locationName,
-      serviceType,
-      serviceUnit,
-      locationArea,
-      contractGroup,
-      gpsUsed,
-      startTime,
-      endTime,
-      beforePhotos,
-      afterPhotos
+      locationName, serviceType, serviceUnit, locationArea,
+      contractGroup, gpsUsed, startTime, endTime,
+      beforePhotos, afterPhotos
     } = req.body;
 
+    // ADICIONADO: Lógica para deletar arquivos de foto removidos
+    const currentRecord = await prisma.record.findUnique({ where: { id: recordId } });
+    if (!currentRecord) {
+        return res.status(404).json({ message: 'Record not found' });
+    }
+    
+    const oldPhotos = [...currentRecord.beforePhotos, ...currentRecord.afterPhotos];
+    const newPhotos = new Set([...(beforePhotos || []), ...(afterPhotos || [])]);
+    const photosToDelete = oldPhotos.filter(p => !newPhotos.has(p));
+
+    for (const photoPath of photosToDelete) {
+        try {
+            const fullPath = path.join(__dirname, '..', photoPath);
+            await fs.unlink(fullPath);
+        } catch (fileErr) {
+            console.error(`Falha ao deletar arquivo removido ${photoPath}:`, fileErr.message);
+        }
+    }
+    // FIM DA ADIÇÃO
+
     const updatedRecord = await prisma.record.update({
-      where: { id: parseInt(req.params.id, 10) },
+      where: { id: recordId },
       data: {
-        locationName,
-        serviceType,
-        serviceUnit,
-        locationArea,
-        contractGroup,
-        gpsUsed,
+        locationName, serviceType, serviceUnit, locationArea,
+        contractGroup, gpsUsed,
         startTime: startTime ? new Date(startTime) : undefined,
         endTime: endTime ? new Date(endTime) : undefined,
         beforePhotos: beforePhotos ?? undefined,
@@ -168,7 +184,7 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
   }
 });
 
-// Delete a record
+// Rota para deletar um registro
 router.delete('/:id', protect, adminOnly, async (req, res) => {
   try {
     const recordId = parseInt(req.params.id, 10);
@@ -178,10 +194,20 @@ router.delete('/:id', protect, adminOnly, async (req, res) => {
       return res.status(404).json({ message: 'Record not found' });
     }
 
-    // Apaga primeiro
+    // ADICIONADO: Lógica para deletar arquivos de foto associados
+    const photosToDelete = [...record.beforePhotos, ...record.afterPhotos];
+    for (const photoPath of photosToDelete) {
+      try {
+        const fullPath = path.join(__dirname, '..', photoPath);
+        await fs.unlink(fullPath);
+      } catch (fileErr) {
+        console.error(`Falha ao deletar arquivo ${photoPath}:`, fileErr.message);
+      }
+    }
+    // FIM DA ADIÇÃO
+
     await prisma.record.delete({ where: { id: recordId } });
 
-    // Tenta registrar log, mas sem quebrar se algum campo vier null
     try {
       await prisma.auditLog.create({
         data: {
