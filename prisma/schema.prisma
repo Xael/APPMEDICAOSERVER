@@ -12,17 +12,17 @@ datasource db {
 // ---------------------------
 
 model User {
-  id          Int       @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   name        String
-  email       String    @unique
+  email       String   @unique
   password    String
-  role        Role      @default(OPERATOR)
+  role        Role     @default(OPERATOR)
   assignments Json?
 
   records     Record[]
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@map("users")
 }
@@ -36,6 +36,7 @@ model Location {
   lng       Float?
 
   records   Record[]
+  services  Service[] // <--- LINHA ADICIONADA
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -44,7 +45,7 @@ model Location {
 }
 
 model Record {
-  id            Int      @id @default(autoincrement())
+  id            Int       @id @default(autoincrement())
   operatorId    Int
   operatorName  String
   serviceType   String
@@ -52,11 +53,11 @@ model Record {
   locationName  String
   contractGroup String
   locationArea  Float?
-  gpsUsed       Boolean  @default(false)
+  gpsUsed       Boolean   @default(false)
   startTime     DateTime
   endTime       DateTime?
-  beforePhotos  String[] @default([])
-  afterPhotos   String[] @default([])
+  beforePhotos  String[]  @default([])
+  afterPhotos   String[]  @default([])
 
   locationId Int?
   operator   User      @relation(fields: [operatorId], references: [id], onDelete: Cascade)
@@ -73,6 +74,8 @@ model Service {
   id        Int      @id @default(autoincrement())
   name      String   @unique
   unit      String
+  
+  locations Location[] // <--- LINHA ADICIONADA
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
