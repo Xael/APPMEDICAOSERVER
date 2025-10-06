@@ -194,7 +194,7 @@ router.delete('/:id', protect, adminOnly, async (req, res) => {
       return res.status(404).json({ message: 'Record not found' });
     }
 
-    // ADICIONADO: Lógica para deletar arquivos de foto associados
+    // Lógica para deletar arquivos de foto associados
     const photosToDelete = [...record.beforePhotos, ...record.afterPhotos];
     for (const photoPath of photosToDelete) {
       try {
@@ -204,22 +204,24 @@ router.delete('/:id', protect, adminOnly, async (req, res) => {
         console.error(`Falha ao deletar arquivo ${photoPath}:`, fileErr.message);
       }
     }
-    // FIM DA ADIÇÃO
 
     await prisma.record.delete({ where: { id: recordId } });
 
+    // Bloco do AuditLog CORRIGIDO
     try {
       await prisma.auditLog.create({
         data: {
-          adminId: String(req.user.id),
+          adminId: parseInt(req.user.id, 10), // GARANTE QUE SEJA NÚMERO
           adminUsername: req.user.name || 'Desconhecido',
           action: 'DELETE',
-          recordId: String(recordId),
+          recordId: recordId, // USA A VARIÁVEL QUE JÁ É NÚMERO
           details: `Registro excluído: ${record.serviceType || 'N/A'} em ${record.locationName || 'N/A'}, ${record.contractGroup || 'N/A'}.`,
         },
       });
     } catch (logErr) {
       console.error("Erro ao salvar audit log:", logErr.message);
+      // Mesmo que o log falhe, a operação principal já foi concluída.
+      // Você pode decidir se quer ou não retornar um erro aqui.
     }
 
     res.status(204).send();
