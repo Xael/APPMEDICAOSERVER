@@ -13,10 +13,10 @@ router.get('/', protect, async (req, res) => {
         services: true // Inclui os serviços relacionados
       }
     });
-    // Mapeia os IDs de serviço para o formato que o frontend espera (service_ids)
+    // Mapeia os IDs de serviço para o formato que o frontend espera (serviceIds)
     const formattedLocations = locations.map(loc => ({
         ...loc,
-        service_ids: loc.services.map(s => s.id)
+        serviceIds: loc.services.map(s => String(s.id)) // Garante que IDs sejam strings no frontend
     }));
     res.json(formattedLocations);
   } catch (error) {
@@ -36,6 +36,12 @@ router.post('/', protect, adminOnly, async (req, res) => {
         area, 
         lat, 
         lng,
+        // =================================================================
+        // CORREÇÃO: Adicionada a conexão com o usuário que está criando.
+        // =================================================================
+        author: {
+            connect: { id: parseInt(req.user.id, 10) }
+        },
         // Conecta os serviços selecionados ao novo local
         services: {
             connect: (service_ids || []).map((id) => ({ id: parseInt(id) }))
@@ -53,8 +59,9 @@ router.post('/', protect, adminOnly, async (req, res) => {
 router.put('/:id', protect, adminOnly, async (req, res) => {
   const { city, name, area, lat, lng, service_ids } = req.body;
   try {
+    const locationId = parseInt(req.params.id);
     const updatedLocation = await prisma.location.update({
-      where: { id: parseInt(req.params.id) },
+      where: { id: locationId },
       data: { 
         city, 
         name, 
@@ -67,6 +74,22 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
         }
       },
     });
+
+    // Opcional, mas recomendado: Adicionar registro de auditoria para a atualização
+    try {
+        await prisma.auditLog.create({
+            data: {
+                adminId: parseInt(req.user.id, 10),
+                adminUsername: req.user.name || 'Desconhecido',
+                action: 'UPDATE',
+                recordId: String(locationId), // AuditLog pode esperar string para IDs de diferentes tabelas
+                details: `Local atualizado: "${name}" em ${city}.`,
+            },
+        });
+    } catch (logErr) {
+        console.error("Erro ao salvar audit log para atualização de local:", logErr.message);
+    }
+
     res.json(updatedLocation);
   } catch (error) {
     console.error("Error updating location:", error);
@@ -77,9 +100,36 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
 // Delete a location
 router.delete('/:id', protect, adminOnly, async (req, res) => {
   try {
-    await prisma.location.delete({
-      where: { id: parseInt(req.params.id) },
+    const locationId = parseInt(req.params.id);
+
+    // Adicionado: Buscar dados do local antes de deletar para usar no log
+    const locationToDelete = await prisma.location.findUnique({
+        where: { id: locationId },
     });
+
+    if (!locationToDelete) {
+        return res.status(404).json({ message: 'Location not found' });
+    }
+
+    await prisma.location.delete({
+      where: { id: locationId },
+    });
+
+    // Adicionado: Registro de auditoria para a exclusão
+     try {
+        await prisma.auditLog.create({
+            data: {
+                adminId: parseInt(req.user.id, 10),
+                adminUsername: req.user.name || 'Desconhecido',
+                action: 'DELETE',
+                recordId: String(locationId),
+                details: `Local excluído: "${locationToDelete.name}" em ${locationToDelete.city}.`,
+            },
+        });
+    } catch (logErr) {
+        console.error("Erro ao salvar audit log para exclusão de local:", logErr.message);
+    }
+
     res.status(204).send();
   } catch (error) {
     console.error("Error deleting location:", error);
