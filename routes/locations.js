@@ -4,20 +4,31 @@ const { PrismaClient } = require('@prisma/client');
 const { protect, adminOnly } = require('../middleware/auth');
 const prisma = new PrismaClient();
 
-// Get all locations, INCLUDING their associated services
+// Get all locations
 router.get('/', protect, async (req, res) => {
   try {
     const locations = await prisma.location.findMany({ 
       orderBy: { name: 'asc' },
       include: {
-        services: true // Inclui os serviços relacionados
+        services: true
       }
     });
-    // Mapeia os IDs de serviço para o formato que o frontend espera
-    const formattedLocations = locations.map(loc => ({
-        ...loc,
+
+    // =================================================================
+    // CORREÇÃO FINAL: Renomeando 'city' para 'contractGroup'
+    // =================================================================
+    const formattedLocations = locations.map(loc => {
+      // Pega o campo 'city' e todo o resto do objeto 'loc'
+      const { city, ...rest } = loc; 
+      
+      // Retorna um novo objeto com todos os dados, mas agora com 'contractGroup' em vez de 'city'
+      return {
+        ...rest,
+        contractGroup: city, // <-- A TRADUÇÃO ACONTECE AQUI
         serviceIds: loc.services.map(s => String(s.id))
-    }));
+      };
+    });
+
     res.json(formattedLocations);
   } catch (error) {
     console.error("Error fetching locations:", error.message);
@@ -29,7 +40,6 @@ router.get('/', protect, async (req, res) => {
 router.post('/', protect, adminOnly, async (req, res) => {
   const { city, name, area, lat, lng, service_ids } = req.body;
   try {
-    // CORREÇÃO: Filtra para garantir que apenas IDs válidos sejam usados
     const serviceIdsAsNumbers = (service_ids || [])
         .map(id => parseInt(id, 10))
         .filter(id => !isNaN(id));
@@ -41,7 +51,6 @@ router.post('/', protect, adminOnly, async (req, res) => {
         area, 
         lat, 
         lng,
-        // Conexão com o usuário foi removida, pois não existe no schema.
         services: {
             connect: serviceIdsAsNumbers.map(id => ({ id }))
         }
@@ -60,7 +69,6 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
   try {
     const locationId = parseInt(req.params.id);
 
-    // CORREÇÃO: Filtra para garantir que apenas IDs válidos sejam usados
     const serviceIdsAsNumbers = (service_ids || [])
         .map(id => parseInt(id, 10))
         .filter(id => !isNaN(id));
@@ -73,7 +81,6 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
         area, 
         lat, 
         lng,
-        // 'set' desconecta todos os antigos e conecta apenas os novos
         services: {
             set: serviceIdsAsNumbers.map(id => ({ id }))
         }
