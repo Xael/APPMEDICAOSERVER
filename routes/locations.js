@@ -37,7 +37,7 @@ router.post('/', protect, adminOnly, async (req, res) => {
         lat, 
         lng,
         // =================================================================
-        // CORREÇÃO: Adicionada a conexão com o usuário que está criando.
+        // LINHA DA CORREÇÃO: Conecta o local ao usuário logado (autor)
         // =================================================================
         author: {
             connect: { id: parseInt(req.user.id, 10) }
@@ -54,6 +54,7 @@ router.post('/', protect, adminOnly, async (req, res) => {
     res.status(500).json({ message: 'Error creating location', error: error.message });
   }
 });
+
 
 // Update a location
 router.put('/:id', protect, adminOnly, async (req, res) => {
