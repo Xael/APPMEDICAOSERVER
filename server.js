@@ -1,4 +1,5 @@
 require('dotenv').config();
+const contractConfigRoutes = require('./routes/contractConfig.js');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -31,6 +32,7 @@ app.get('/api', (req, res) => {
   res.json({ message: 'CRB Serviços API is running!' });
 });
 
+app.use('/api/contract-configs', contractConfigRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/records', recordRoutes);
 app.use('/api/locations', locationRoutes);
