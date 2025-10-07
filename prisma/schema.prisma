@@ -20,6 +20,8 @@ model User {
   assignments Json?
 
   records     Record[]
+  // Adicionando a relação com Location, se necessário no futuro
+  // locations   Location[] 
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -36,7 +38,7 @@ model Location {
   lng       Float?
 
   records   Record[]
-  services  Service[] // <--- LINHA ADICIONADA
+  services  Service[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -75,7 +77,7 @@ model Service {
   name      String   @unique
   unit      String
   
-  locations Location[] // <--- LINHA ADICIONADA
+  locations Location[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -107,6 +109,21 @@ model AuditLog {
 
   @@map("audit_logs")
 }
+
+// ===================================================
+// ===== BLOCO NOVO ADICIONADO NO FINAL DOS MODELS =====
+// ===================================================
+model ContractConfig {
+  id             Int    @id @default(autoincrement())
+  contractGroup  String @unique
+  cycleStartDay  Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("contract_configs")
+}
+
 
 // ---------------------------
 // ENUMS
