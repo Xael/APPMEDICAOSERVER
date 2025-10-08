@@ -10,6 +10,7 @@ const recordRoutes = require('./routes/records');
 const locationRoutes = require('./routes/locations');
 const userRoutes = require('./routes/users');
 const serviceRoutes = require('./routes/services');
+const unitRoutes = require('./routes/units');
 const goalRoutes = require('./routes/goals');
 const auditLogRoutes = require('./routes/auditLog');
 
@@ -38,6 +39,7 @@ app.use('/api/records', recordRoutes);
 app.use('/api/locations', locationRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/services', serviceRoutes);
+app.use('/api/units', unitRoutes);
 app.use('/api/goals', goalRoutes);
 app.use('/api/audit-log', auditLogRoutes);
 
