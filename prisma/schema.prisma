@@ -19,14 +19,9 @@ model Unit {
 
 model Service {
   id        Int      @id @default(autoincrement())
-  name      String
-  
-  // CAMPO 'unit' REMOVIDO
-  // AGORA TEMOS UMA RELAÇÃO COM O MODELO 'Unit'
+  name      String   @unique // <-- ADICIONE APENAS O @unique AQUI
   unitId    Int
   unit      Unit     @relation(fields: [unitId], references: [id])
-
-  // Relação com a nova tabela de junção
   locations LocationService[]
 }
 
@@ -114,3 +109,4 @@ model AuditLog {
 
   admin         User     @relation(fields: [adminId], references: [id])
 }
+
