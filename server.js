@@ -13,6 +13,7 @@ const serviceRoutes = require('./routes/services');
 const unitRoutes = require('./routes/units');
 const goalRoutes = require('./routes/goals');
 const auditLogRoutes = require('./routes/auditLog');
+const reportRoutes = require('./routes/reports.js');
 
 const app = express();
 const PORT = process.env.PORT || 8000;
@@ -42,6 +43,7 @@ app.use('/api/services', serviceRoutes);
 app.use('/api/units', unitRoutes);
 app.use('/api/goals', goalRoutes);
 app.use('/api/audit-log', auditLogRoutes);
+app.use('/api/reports', reportRoutes);
 
 // Start Server
 app.listen(PORT, () => {
