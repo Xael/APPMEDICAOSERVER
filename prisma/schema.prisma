@@ -1,3 +1,5 @@
+// ./prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,95 +9,98 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ---------------------------
-// MODELS
-// ---------------------------
-
-model User {
-  id          Int      @id @default(autoincrement())
-  name        String
-  email       String   @unique
-  password    String
-  role        Role     @default(OPERATOR)
-  assignments Json?
-
-  records     Record[]
-  // Adicionando a relação com Location, se necessário no futuro
-  // locations   Location[] 
-
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  @@map("users")
-}
-
-model Location {
+// NOVO MODELO PARA UNIDADES DE MEDIDA
+model Unit {
   id        Int      @id @default(autoincrement())
-  city      String
-  name      String
-  area      Float
-  lat       Float?
-  lng       Float?
-
-  records   Record[]
+  name      String   // Ex: "Metros Quadrados", "Horas", "Quantidade"
+  symbol    String   // Ex: "m²", "h", "qtd"
   services  Service[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("locations")
-}
-
-model Record {
-  id            Int       @id @default(autoincrement())
-  operatorId    Int
-  operatorName  String
-  serviceType   String
-  serviceUnit   String
-  locationName  String
-  contractGroup String
-  locationArea  Float?
-  gpsUsed       Boolean   @default(false)
-  startTime     DateTime
-  endTime       DateTime?
-  beforePhotos  String[]  @default([])
-  afterPhotos   String[]  @default([])
-
-  locationId Int?
-  operator   User      @relation(fields: [operatorId], references: [id], onDelete: Cascade)
-  location   Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([startTime, operatorId], map: "idx_records_start_operator")
-  @@map("records")
 }
 
 model Service {
   id        Int      @id @default(autoincrement())
-  name      String   @unique
-  unit      String
+  name      String
   
-  locations Location[]
+  // CAMPO 'unit' REMOVIDO
+  // AGORA TEMOS UMA RELAÇÃO COM O MODELO 'Unit'
+  unitId    Int
+  unit      Unit     @relation(fields: [unitId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // Relação com a nova tabela de junção
+  locations LocationService[]
+}
 
-  @@map("services")
+model Location {
+  id            Int      @id @default(autoincrement())
+  city          String   // O frontend chama isso de 'contractGroup'
+  name          String
+  lat           Float?
+  lng           Float?
+
+  // CAMPO 'area' REMOVIDO
+  
+  records       Record[]
+  
+  // A RELAÇÃO COM SERVIÇOS AGORA É ATRAVÉS DA TABELA 'LocationService'
+  services      LocationService[]
+}
+
+// NOVA TABELA DE JUNÇÃO PARA ARMAZENAR MEDIÇÕES
+model LocationService {
+  locationId    Int
+  serviceId     Int
+  measurement   Float    // A medição específica (metragem, tempo, qtd)
+
+  location      Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  service       Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([locationId, serviceId]) // Chave primária composta
+}
+
+// --- OUTROS MODELOS (provavelmente já existem, mantenha como estão) ---
+
+model User {
+  id            Int      @id @default(autoincrement())
+  email         String   @unique
+  name          String
+  password      String
+  role          String   // ADMIN, OPERATOR, FISCAL
+  assignments   Json?
+  records       Record[]
+  auditLogs     AuditLog[]
+}
+
+model Record {
+  id              Int      @id @default(autoincrement())
+  operatorId      Int
+  operatorName    String
+  serviceType     String
+  serviceUnit     String
+  locationId      Int?
+  locationName    String
+  contractGroup   String
+  locationArea    Float?
+  gpsUsed         Boolean
+  startTime       DateTime
+  endTime         DateTime?
+  beforePhotos    String[]
+  afterPhotos     String[]
+  
+  operator        User     @relation(fields: [operatorId], references: [id])
+  location        Location? @relation(fields: [locationId], references: [id])
 }
 
 model Goal {
   id            Int      @id @default(autoincrement())
   contractGroup String
-  month         String // "YYYY-MM"
+  month         String
   targetArea    Float
+}
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([contractGroup, month])
-  @@map("goals")
+model ContractConfig {
+  id             Int    @id @default(autoincrement())
+  contractGroup  String @unique
+  cycleStartDay  Int
 }
 
 model AuditLog {
@@ -103,34 +108,9 @@ model AuditLog {
   timestamp     DateTime @default(now())
   adminId       Int
   adminUsername String
-  action        String
+  action        String   // UPDATE or DELETE
   recordId      Int
   details       String
 
-  @@map("audit_logs")
-}
-
-// ===================================================
-// ===== BLOCO NOVO ADICIONADO NO FINAL DOS MODELS =====
-// ===================================================
-model ContractConfig {
-  id             Int    @id @default(autoincrement())
-  contractGroup  String @unique
-  cycleStartDay  Int
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("contract_configs")
-}
-
-
-// ---------------------------
-// ENUMS
-// ---------------------------
-
-enum Role {
-  OPERATOR
-  FISCAL
-  ADMIN
+  admin         User     @relation(fields: [adminId], references: [id])
 }
