@@ -1,48 +1,70 @@
-// prisma/seed.js
+// Em prisma/seed.js
+
 const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Seed: criando/atualizando admin e serviços padrão...');
+  console.log('Seed: criando/atualizando admin, unidades e serviços padrão...');
 
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@crb.com';
-  const adminPass  = process.env.ADMIN_PASSWORD || 'admin123';
+  // 1. Garante o usuário admin
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(process.env.ADMIN_PASSWORD || 'admin123', salt);
 
-  const hash = await bcrypt.hash(adminPass, 10);
-
-  // Garante que o admin sempre exista e esteja atualizado
-  await prisma.user.upsert({
-    where: { email: adminEmail },
-    update: { password: hash, role: 'ADMIN', name: 'Administrador' },
-    create: { name: 'Administrador', email: adminEmail, password: hash, role: 'ADMIN' },
+  const admin = await prisma.user.upsert({
+    where: { email: process.env.ADMIN_EMAIL || 'admin@crb.com' },
+    update: {},
+    create: {
+      email: process.env.ADMIN_EMAIL || 'admin@crb.com',
+      name: 'Administrador',
+      password: hashedPassword,
+      role: 'ADMIN',
+    },
   });
-  console.log(`✔ Admin garantido: ${adminEmail}`);
+  console.log(`✔ Admin garantido: ${admin.email}`);
 
-  // Serviços padrão
-  const defaults = [
-    { name: 'Varrição Manual', unit: 'm linear' },
-    { name: 'Roçada Mecanizada', unit: 'm²' },
-    { name: 'Capina e Limpeza de Meio Fio', unit: 'm linear' },
-    { name: 'Pintura de Meio Fio', unit: 'm linear' },
-    { name: 'Coleta de Entulho', unit: 'm²' },
+  // 2. Cria as unidades de medida padrão
+  const unitM2 = await prisma.unit.upsert({
+    where: { id: 1 }, // Usando ID fixo para consistência
+    update: {},
+    create: { id: 1, name: 'Metros Quadrados', symbol: 'm²' },
+  });
+
+  const unitMlinear = await prisma.unit.upsert({
+    where: { id: 2 },
+    update: {},
+    create: { id: 2, name: 'Metros Lineares', symbol: 'm linear' },
+  });
+  console.log('✔ Unidades padrão garantidas: m² e m linear');
+
+
+  // 3. Cria os serviços padrão, conectando com as unidades criadas
+  const defaultServices = [
+    { name: 'Varrição Manual', unitId: unitMlinear.id },
+    { name: 'Roçada', unitId: unitM2.id },
+    { name: 'Limpeza de Vidro', unitId: unitM2.id },
   ];
 
-  for (const s of defaults) {
+  for (const service of defaultServices) {
     await prisma.service.upsert({
-      where: { name: s.name },
-      update: { unit: s.unit },
-      create: s,
+      where: { name: service.name },
+      update: { unitId: service.unitId },
+      create: {
+        name: service.name,
+        unitId: service.unitId,
+      },
     });
-    console.log(`✔ Serviço garantido: ${s.name}`);
   }
-
-  console.log('✔ Seed finalizado com sucesso');
+  console.log('✔ Serviços padrão garantidos.');
+  
+  console.log('Seed finalizado com sucesso!');
 }
 
 main()
-  .catch(e => {
+  .catch((e) => {
     console.error('Seed error:', e);
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
