@@ -1,3 +1,5 @@
+// ./routes/locations.js
+
 const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
@@ -7,25 +9,34 @@ const prisma = new PrismaClient();
 // Get all locations
 router.get('/', protect, async (req, res) => {
   try {
-    const locations = await prisma.location.findMany({ 
+    const locations = await prisma.location.findMany({
       orderBy: { name: 'asc' },
       include: {
-        services: true
+        services: { // Inclui os dados da tabela de junção
+          include: {
+            service: { // Inclui os dados do serviço relacionado
+              include: {
+                unit: true // E também os dados da unidade
+              }
+            }
+          }
+        }
       }
     });
 
-    // =================================================================
-    // CORREÇÃO FINAL: Renomeando 'city' para 'contractGroup'
-    // =================================================================
+    // Formata a resposta para o frontend
     const formattedLocations = locations.map(loc => {
-      // Pega o campo 'city' e todo o resto do objeto 'loc'
-      const { city, ...rest } = loc; 
-      
-      // Retorna um novo objeto com todos os dados, mas agora com 'contractGroup' em vez de 'city'
+      const { city, services, ...rest } = loc;
       return {
         ...rest,
-        contractGroup: city, // <-- A TRADUÇÃO ACONTECE AQUI
-        serviceIds: loc.services.map(s => String(s.id))
+        contractGroup: city,
+        // Agora 'services' é um array de objetos com todos os detalhes
+        services: services.map(ls => ({
+          serviceId: ls.serviceId,
+          name: ls.service.name,
+          measurement: ls.measurement,
+          unit: ls.service.unit,
+        }))
       };
     });
 
@@ -38,21 +49,25 @@ router.get('/', protect, async (req, res) => {
 
 // Create a new location
 router.post('/', protect, adminOnly, async (req, res) => {
-  const { city, name, area, lat, lng, service_ids } = req.body;
-  try {
-    const serviceIdsAsNumbers = (service_ids || [])
-        .map(id => parseInt(id, 10))
-        .filter(id => !isNaN(id));
+  // O frontend agora envia 'services' com 'service_id' e 'measurement'
+  const { city, name, lat, lng, services } = req.body;
+  
+  if (!Array.isArray(services)) {
+    return res.status(400).json({ message: 'Services must be an array.' });
+  }
 
+  try {
     const newLocation = await prisma.location.create({
-      data: { 
-        city, 
-        name, 
-        area, 
-        lat, 
+      data: {
+        city,
+        name,
+        lat,
         lng,
         services: {
-            connect: serviceIdsAsNumbers.map(id => ({ id }))
+          create: services.map(s => ({
+            measurement: parseFloat(s.measurement),
+            service: { connect: { id: parseInt(s.service_id) } }
+          }))
         }
       },
     });
@@ -65,28 +80,37 @@ router.post('/', protect, adminOnly, async (req, res) => {
 
 // Update a location
 router.put('/:id', protect, adminOnly, async (req, res) => {
-  const { city, name, area, lat, lng, service_ids } = req.body;
+  const { city, name, lat, lng, services } = req.body;
+  const locationId = parseInt(req.params.id);
+
+  if (!Array.isArray(services)) {
+    return res.status(400).json({ message: 'Services must be an array.' });
+  }
+
   try {
-    const locationId = parseInt(req.params.id);
-
-    const serviceIdsAsNumbers = (service_ids || [])
-        .map(id => parseInt(id, 10))
-        .filter(id => !isNaN(id));
-
-    const updatedLocation = await prisma.location.update({
-      where: { id: locationId },
-      data: { 
-        city, 
-        name, 
-        area, 
-        lat, 
-        lng,
-        services: {
-            set: serviceIdsAsNumbers.map(id => ({ id }))
+    // Transação para garantir consistência: deleta os antigos e cria os novos
+    const transaction = await prisma.$transaction([
+      // 1. Deleta todas as medições antigas para este local
+      prisma.locationService.deleteMany({ where: { locationId: locationId } }),
+      // 2. Atualiza os dados do local e cria as novas medições
+      prisma.location.update({
+        where: { id: locationId },
+        data: {
+          city,
+          name,
+          lat,
+          lng,
+          services: {
+            create: services.map(s => ({
+              measurement: parseFloat(s.measurement),
+              service: { connect: { id: parseInt(s.service_id) } }
+            }))
+          }
         }
-      },
-    });
-    res.json(updatedLocation);
+      })
+    ]);
+    
+    res.json(transaction[1]); // Retorna o resultado da operação de update
   } catch (error) {
     console.error("Error updating location:", error);
     res.status(500).json({ message: 'Error updating location', error: error.message });
@@ -97,6 +121,8 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
 router.delete('/:id', protect, adminOnly, async (req, res) => {
   try {
     const locationId = parseInt(req.params.id);
+    // Graças ao 'onDelete: Cascade' no schema, deletar o local
+    // irá deletar automaticamente as entradas em 'LocationService'
     await prisma.location.delete({
       where: { id: locationId },
     });
@@ -106,5 +132,6 @@ router.delete('/:id', protect, adminOnly, async (req, res) => {
     res.status(500).json({ message: 'Error deleting location', error: error.message });
   }
 });
+
 
 module.exports = router;
