@@ -48,7 +48,7 @@ router.get('/', protect, async (req, res) => {
 });
 
 // Create a new location
-router.post('/', protect, adminOnly, async (req, res) => {
+router.post('/', protect, async (req, res) => {
   // O frontend agora envia 'services' com 'service_id' e 'measurement'
   const { city, name, lat, lng, services } = req.body;
   
