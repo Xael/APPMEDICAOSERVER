@@ -70,10 +70,47 @@ router.get('/:id', protect, async (req, res) => {
 
 // Rota para criar um novo registro
 router.post('/', protect, async (req, res) => {
-  const { operatorId, serviceType, serviceUnit, locationId, locationName, contractGroup, locationArea, gpsUsed, startTime } = req.body;
+  // Pega todos os dados, incluindo o novo objeto 'newLocationInfo'
+  const { 
+    operatorId, serviceType, serviceUnit, locationName, 
+    contractGroup, locationArea, gpsUsed, startTime, newLocationInfo 
+  } = req.body;
+  
+  // Usa o locationId existente por padrão
+  let finalLocationId = req.body.locationId;
+
   try {
+    // 1. VERIFICA SE PRECISA CRIAR UM NOVO LOCAL
+    if (newLocationInfo && newLocationInfo.name) {
+      console.log('Recebido pedido para criar novo local:', newLocationInfo.name);
+      try {
+        const newLocation = await prisma.location.create({
+          data: {
+            city: newLocationInfo.city,
+            name: newLocationInfo.name,
+            lat: newLocationInfo.lat,
+            lng: newLocationInfo.lng,
+            services: {
+              create: (newLocationInfo.services || []).map(s => ({
+                measurement: parseFloat(s.measurement),
+                service: { connect: { id: parseInt(s.service_id) } }
+              }))
+            }
+          }
+        });
+        finalLocationId = newLocation.id; // Guarda o ID do local recém-criado
+        console.log('Novo local criado com ID:', finalLocationId);
+      } catch (locError) {
+        console.error("Falha ao criar o novo local automaticamente:", locError);
+        // Se a criação do local falhar, o registro ainda será criado, mas sem um link de local.
+      }
+    }
+
+    // 2. CRIA O REGISTRO DE SERVIÇO, USANDO O ID DO LOCAL (NOVO OU EXISTENTE)
     const operator = await prisma.user.findUnique({ where: { id: parseInt(operatorId) } });
-    if (!operator) return res.status(404).json({ message: "Operator not found" });
+    if (!operator) {
+      return res.status(404).json({ message: "Operator not found" });
+    }
 
     const newRecord = await prisma.record.create({
       data: {
@@ -86,15 +123,17 @@ router.post('/', protect, async (req, res) => {
         startTime: new Date(startTime),
         operator: { connect: { id: operator.id } },
         operatorName: operator.name,
-        location: locationId ? { connect: { id: parseInt(locationId) } } : undefined,
+        // Conecta o registro ao local, seja ele um que já existia ou o que acabamos de criar
+        location: finalLocationId ? { connect: { id: parseInt(finalLocationId) } } : undefined,
       },
     });
     res.status(201).json(newRecord);
+
   } catch (error) {
+    console.error("Error creating record:", error);
     res.status(500).json({ message: 'Error creating record', error: error.message });
   }
 });
-
 // Rota para fazer upload de fotos para um registro (CORRIGIDA)
 router.post('/:id/photos', protect, upload.array('files'), async (req, res) => {
     const { phase } = req.body; // 'BEFORE' or 'AFTER'
