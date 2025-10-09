@@ -65,31 +65,54 @@ router.get('/:id', protect, async (req, res) => {
   }
 });
 
-// Rota para criar um novo registro
-router.post('/', protect, async (req, res) => {
-  const { operatorId, serviceType, serviceUnit, locationId, locationName, contractGroup, locationArea, gpsUsed, startTime } = req.body;
-  try {
-    const operator = await prisma.user.findUnique({ where: { id: parseInt(operatorId) } });
-    if (!operator) return res.status(404).json({ message: "Operator not found" });
+// SUBSTITUA TODA ESTA ROTA EM 'records.js'
 
-    const newRecord = await prisma.record.create({
-      data: {
-        serviceType,
-        serviceUnit,
-        locationName,
-        contractGroup,
-        locationArea,
-        gpsUsed,
-        startTime: new Date(startTime),
-        operator: { connect: { id: operator.id } },
-        operatorName: operator.name,
-        location: locationId ? { connect: { id: parseInt(locationId) } } : undefined,
-      },
-    });
-    res.status(201).json(newRecord);
-  } catch (error) {
-    res.status(500).json({ message: 'Error creating record', error: error.message });
-  }
+router.post('/:id/photos', protect, upload.array('files'), async (req, res) => {
+    const { phase } = req.body; // 'BEFORE' or 'AFTER'
+    
+    // ======== ADICIONADO: Validação do ID ========
+    const recordId = parseInt(req.params.id, 10);
+    if (isNaN(recordId)) {
+        return res.status(400).json({ message: 'ID de registro inválido.' });
+    }
+    // ===========================================
+
+    if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ message: 'No files uploaded.' });
+    }
+
+    if (!['BEFORE', 'AFTER'].includes(phase)) {
+        return res.status(400).json({ message: 'Phase must be BEFORE or AFTER.' });
+    }
+
+    try {
+        const record = await prisma.record.findUnique({ where: { id: recordId } }); // Usa a variável validada
+        if (!record) {
+            return res.status(404).json({ message: 'Record not found' });
+        }
+
+        const photoPaths = req.files.map(file => `/uploads/${file.filename}`);
+
+        let updatedRecord;
+        if (phase === 'BEFORE') {
+            updatedRecord = await prisma.record.update({
+                where: { id: recordId }, // Usa a variável validada
+                data: { beforePhotos: { push: photoPaths } },
+            });
+        } else { // AFTER
+            updatedRecord = await prisma.record.update({
+                where: { id: recordId }, // Usa a variável validada
+                data: { 
+                    afterPhotos: { push: photoPaths },
+                    endTime: new Date()
+                },
+            });
+        }
+        res.status(200).json(updatedRecord);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Error uploading photos', error: error.message });
+    }
 });
 
 // Rota para fazer upload de fotos para um registro
