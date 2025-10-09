@@ -14,7 +14,7 @@ const unitRoutes = require('./routes/units');
 const goalRoutes = require('./routes/goals');
 const auditLogRoutes = require('./routes/auditLog');
 const reportRoutes = require('./routes/reports.js');
-const express = require('express');
+
 const app = express();
 const PORT = process.env.PORT || 8000;
 
