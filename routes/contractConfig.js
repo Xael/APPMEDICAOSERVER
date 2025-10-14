@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 const { protect, adminOnly } = require('../middleware/auth');
-const bcrypt = require('bcryptjs'); // Usando bcryptjs
+const bcrypt = require('bcryptjs'); // Apenas para confirmar a importação correta
 const prisma = new PrismaClient();
 
 // Rota para buscar todas as configurações de contrato
@@ -53,47 +53,47 @@ router.put('/:oldName', protect, adminOnly, async (req, res) => {
     }
 
     try {
-        const usersToUpdate = await prisma.user.findMany({
-            // SINTAXE CORRIGIDA: busca todos os usuários, pois a consulta 'some' para Jsonb pode ser complexa
-            where: {
-                assignments: {
-                    json_contains: {
-                        path: '$[*].contractGroup',
-                        string_value: oldName
-                    }
-                }
-            }
-        });
+        // Busca todos os usuários, independentemente das atribuições.
+        // A lógica de filtragem e atualização será feita na memória.
+        const allUsers = await prisma.user.findMany();
 
         const transactions = [
+            // Atualiza o nome do grupo em Locais
             prisma.location.updateMany({
                 where: { contractGroup: oldName },
                 data: { contractGroup: newName }
             }),
+            // Atualiza o nome do grupo nas Configurações de Ciclo
             prisma.contractConfig.updateMany({
                 where: { contractGroup: oldName },
                 data: { contractGroup: newName }
             }),
+            // Atualiza o nome do grupo nos Registros de Serviço
             prisma.serviceRecord.updateMany({
                 where: { contractGroup: oldName },
                 data: { contractGroup: newName }
             })
         ];
 
-        for (const user of usersToUpdate) {
+        // Atualiza as atribuições de usuário.
+        for (const user of allUsers) {
+            // Filtra e atualiza o array de atribuições do usuário na memória
             const updatedAssignments = user.assignments.map(assignment => {
                 if (assignment.contractGroup === oldName) {
                     return { ...assignment, contractGroup: newName };
                 }
                 return assignment;
             });
-
-            transactions.push(
-                prisma.user.update({
-                    where: { id: user.id },
-                    data: { assignments: updatedAssignments }
-                })
-            );
+            
+            // Adiciona a transação de update para o usuário, se houver alteração
+            if (JSON.stringify(user.assignments) !== JSON.stringify(updatedAssignments)) {
+                 transactions.push(
+                    prisma.user.update({
+                        where: { id: user.id },
+                        data: { assignments: updatedAssignments }
+                    })
+                );
+            }
         }
 
         await prisma.$transaction(transactions);
@@ -127,22 +127,9 @@ router.delete('/:name', protect, adminOnly, async (req, res) => {
             return res.status(400).json({ message: `Não é possível excluir o contrato, pois ele possui ${serviceRecordsCount} registros de serviço associados.` });
         }
 
-        const usersToUpdate = await prisma.user.findMany({
-            // SINTAXE CORRIGIDA: usa a consulta JSON para Jsonb
-            where: {
-                assignments: {
-                    json_contains: {
-                        path: '$[*].contractGroup',
-                        string_value: name
-                    }
-                }
-            }
-        });
+        const allUsers = await prisma.user.findMany();
 
         const transactions = [
-            prisma.serviceRecord.deleteMany({
-                 where: { contractGroup: name }
-            }),
             prisma.location.deleteMany({
                 where: { contractGroup: name }
             }),
@@ -151,16 +138,18 @@ router.delete('/:name', protect, adminOnly, async (req, res) => {
             }),
         ];
 
-        for (const user of usersToUpdate) {
+        for (const user of allUsers) {
             const updatedAssignments = user.assignments.filter(assignment => assignment.contractGroup !== name);
-            transactions.push(
-                prisma.user.update({
-                    where: { id: user.id },
-                    data: { assignments: updatedAssignments }
-                })
-            );
+            if (JSON.stringify(user.assignments) !== JSON.stringify(updatedAssignments)) {
+                transactions.push(
+                    prisma.user.update({
+                        where: { id: user.id },
+                        data: { assignments: updatedAssignments }
+                    })
+                );
+            }
         }
-
+        
         await prisma.$transaction(transactions);
 
         res.status(200).json({ message: `Grupo de contrato '${name}' e seus locais foram excluídos com sucesso.` });
