@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 const { protect, adminOnly } = require('../middleware/auth');
-const bcrypt = require('bcryptjs'); // Certifique-se de que o bcrypt está importado
+const bcrypt = require('bcryptjs'); // Usando bcryptjs
 const prisma = new PrismaClient();
 
 // Rota para buscar todas as configurações de contrato
@@ -18,7 +18,7 @@ router.get('/', protect, async (req, res) => {
 // Rota para criar ou atualizar as configurações de contrato
 router.post('/', protect, adminOnly, async (req, res) => {
     const { configs } = req.body;
-
+    
     if (!configs || !Array.isArray(configs)) {
         return res.status(400).json({ message: 'Formato de dados inválido.' });
     }
@@ -54,10 +54,12 @@ router.put('/:oldName', protect, adminOnly, async (req, res) => {
 
     try {
         const usersToUpdate = await prisma.user.findMany({
+            // SINTAXE CORRIGIDA: busca todos os usuários, pois a consulta 'some' para Jsonb pode ser complexa
             where: {
                 assignments: {
-                    some: {
-                        contractGroup: oldName
+                    json_contains: {
+                        path: '$[*].contractGroup',
+                        string_value: oldName
                     }
                 }
             }
@@ -126,17 +128,18 @@ router.delete('/:name', protect, adminOnly, async (req, res) => {
         }
 
         const usersToUpdate = await prisma.user.findMany({
+            // SINTAXE CORRIGIDA: usa a consulta JSON para Jsonb
             where: {
                 assignments: {
-                    some: {
-                        contractGroup: name
+                    json_contains: {
+                        path: '$[*].contractGroup',
+                        string_value: name
                     }
                 }
             }
         });
 
         const transactions = [
-            // Inclua esta linha para deletar os registros de serviço relacionados
             prisma.serviceRecord.deleteMany({
                  where: { contractGroup: name }
             }),
