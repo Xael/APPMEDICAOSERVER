@@ -5,6 +5,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
+const contractGroupsRouter = require('./routes/contractConfig');
 const authRoutes = require('./routes/auth');
 const recordRoutes = require('./routes/records');
 const locationRoutes = require('./routes/locations');
