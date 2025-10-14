@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { PrismaClient } = require('@prisma/client');
 const { protect, adminOnly } = require('../middleware/auth');
-const bcrypt = require('bcrypt'); // Certifique-se de que o bcrypt está importado
+const bcrypt = require('bcryptjs'); // Certifique-se de que o bcrypt está importado
 const prisma = new PrismaClient();
 
 // Rota para buscar todas as configurações de contrato
