@@ -59,7 +59,7 @@ router.put('/:oldName', protect, adminOnly, async (req, res) => {
 
         const transactions = [
             // Atualiza o nome do grupo em Locais
-            prisma.location.updateMany({
+            prisma.Location.updateMany({
                 where: { contractGroup: oldName },
                 data: { contractGroup: newName }
             }),
@@ -130,7 +130,7 @@ router.delete('/:name', protect, adminOnly, async (req, res) => {
         const allUsers = await prisma.user.findMany();
 
         const transactions = [
-            prisma.location.deleteMany({
+            prisma.Location.deleteMany({
                 where: { contractGroup: name }
             }),
             prisma.contractConfig.deleteMany({
