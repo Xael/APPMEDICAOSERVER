@@ -7,7 +7,7 @@ services:
     container_name: crb_postgres_db
     restart: unless-stopped
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-data:/var/lib/postgresql/data
     env_file:
       - ./server/.env
     environment:
@@ -48,6 +48,3 @@ services:
       - server
     ports:
       - "80:80"
-
-volumes:
-  postgres_data:
