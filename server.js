@@ -35,6 +35,7 @@ app.get('/api', (req, res) => {
   res.json({ message: 'CRB Serviços API is running!' });
 });
 
+app.use('/api/contract-groups', contractGroupsRouter);
 app.use('/api/contract-configs', contractConfigRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/records', recordRoutes);
