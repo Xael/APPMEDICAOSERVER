@@ -9,64 +9,78 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// NOVO MODELO PARA UNIDADES DE MEDIDA
+// ============================================================
+// MODELO DE UNIDADE DE MEDIDA
+// ============================================================
 model Unit {
-  id        Int      @id @default(autoincrement())
-  name      String   // Ex: "Metros Quadrados", "Horas", "Quantidade"
-  symbol    String   // Ex: "m²", "h", "qtd"
+  id        Int       @id @default(autoincrement())
+  name      String    // Ex: "Metros Quadrados", "Horas", "Quantidade"
+  symbol    String    // Ex: "m²", "h", "qtd"
   services  Service[]
 }
 
+// ============================================================
+// MODELO DE SERVIÇO
+// ============================================================
 model Service {
-  id        Int      @id @default(autoincrement())
-  name      String   @unique // <-- ADICIONE APENAS O @unique AQUI
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
   unitId    Int
-  unit      Unit     @relation(fields: [unitId], references: [id])
+  unit      Unit      @relation(fields: [unitId], references: [id])
   locations LocationService[]
 }
 
+// ============================================================
+// MODELO DE LOCAL
+// ============================================================
 model Location {
-  id            Int      @id @default(autoincrement())
-  city          String   // O frontend chama isso de 'contractGroup'
-  name          String
-  lat           Float?
-  lng           Float?
+  id        Int      @id @default(autoincrement())
+  city      String   // O frontend chama isso de 'contractGroup'
+  name      String
+  lat       Float?
+  lng       Float?
 
-  // CAMPO 'area' REMOVIDO
-  
-  records       Record[]
-  
-  // A RELAÇÃO COM SERVIÇOS AGORA É ATRAVÉS DA TABELA 'LocationService'
-  services      LocationService[]
+  records   Record[]
+  services  LocationService[]
 }
 
-// NOVA TABELA DE JUNÇÃO PARA ARMAZENAR MEDIÇÕES
+// ============================================================
+// MODELO DE RELAÇÃO LOCAL x SERVIÇO
+// ============================================================
 model LocationService {
-  locationId    Int
-  serviceId     Int
-  measurement   Float    // A medição específica (metragem, tempo, qtd)
+  locationId  Int
+  serviceId   Int
+  measurement Float
 
-  location      Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  service       Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  location    Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
-  @@id([locationId, serviceId]) // Chave primária composta
+  @@id([locationId, serviceId])
 }
 
-// --- OUTROS MODELOS (provavelmente já existem, mantenha como estão) ---
-
+// ============================================================
+// MODELO DE USUÁRIO
+// ============================================================
 model User {
-  id            Int      @id @default(autoincrement())
-  email         String   @unique
-  name          String
-  password      String
-  role          String   // ADMIN, OPERATOR, FISCAL
-  assignments   Json?
-  records       Record[]
-  auditLogs     AuditLog[]
+  id                Int      @id @default(autoincrement())
+  email             String   @unique
+  name              String
+  password          String
+  role              String   // ADMIN, OPERATOR, FISCAL
+  assignments       Json?
+  records           Record[]
+  auditLogs         AuditLog[]
+
+  // 🆕 Campos adicionados para recuperação de senha
+  resetToken        String?        // Token temporário enviado por e-mail
+  resetTokenExpires DateTime?      // Data/hora de expiração do token
 }
 
+// ============================================================
+// MODELO DE REGISTRO (execuções de serviços)
+// ============================================================
 model Record {
-  id              Int      @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   operatorId      Int
   operatorName    String
   serviceType     String
@@ -80,11 +94,14 @@ model Record {
   endTime         DateTime?
   beforePhotos    String[]
   afterPhotos     String[]
-  
-  operator        User     @relation(fields: [operatorId], references: [id])
+
+  operator        User      @relation(fields: [operatorId], references: [id])
   location        Location? @relation(fields: [locationId], references: [id])
 }
 
+// ============================================================
+// MODELO DE METAS
+// ============================================================
 model Goal {
   id            Int      @id @default(autoincrement())
   contractGroup String
@@ -92,21 +109,26 @@ model Goal {
   targetArea    Float
 }
 
+// ============================================================
+// CONFIGURAÇÕES DE CONTRATO
+// ============================================================
 model ContractConfig {
   id             Int    @id @default(autoincrement())
   contractGroup  String @unique
   cycleStartDay  Int
 }
 
+// ============================================================
+// LOGS DE AUDITORIA
+// ============================================================
 model AuditLog {
   id            Int      @id @default(autoincrement())
   timestamp     DateTime @default(now())
   adminId       Int
   adminUsername String
-  action        String   // UPDATE or DELETE
+  action        String
   recordId      Int
   details       String
 
   admin         User     @relation(fields: [adminId], references: [id])
 }
-
