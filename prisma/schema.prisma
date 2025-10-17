@@ -72,7 +72,7 @@ model User {
   auditLogs         AuditLog[]
 
   // 🆕 Campos adicionados para recuperação de senha
-  resetToken        String?        // Token temporário enviado por e-mail
+  resetToken        String?  @unique        // Token temporário enviado por e-mail
   resetTokenExpires DateTime?      // Data/hora de expiração do token
 }
 
@@ -132,3 +132,4 @@ model AuditLog {
 
   admin         User     @relation(fields: [adminId], references: [id])
 }
+
