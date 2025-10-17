@@ -45,7 +45,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/units', unitRoutes);
 app.use('/api/goals', goalRoutes);
-app.use('/api/audit-log', auditLogRoutes);
+app.use('/api/auditlog', auditLogRoutes);
 app.use('/api/reports', reportRoutes);
 
 // Start Server
