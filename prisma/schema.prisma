@@ -28,6 +28,7 @@ model Service {
   unitId    Int
   unit      Unit      @relation(fields: [unitId], references: [id])
   locations LocationService[]
+  goals     Goal[] // Adicionado
 }
 
 // ============================================================
@@ -45,7 +46,7 @@ model Location {
 }
 
 // ============================================================
-// MODELO DE RELAÇÃO LOCAL x SERVIÇO
+// MODELO DE RELACIONAMENTO Local <-> Serviço (Tabela de Junção)
 // ============================================================
 model LocationService {
   locationId  Int
@@ -59,30 +60,28 @@ model LocationService {
 }
 
 // ============================================================
-// MODELO DE USUÁRIO
+// MODELO DE UTILIZADOR
 // ============================================================
 model User {
-  id                Int      @id @default(autoincrement())
-  email             String   @unique
+  id                Int        @id @default(autoincrement())
+  email             String     @unique
   name              String
   password          String
-  role              String   // ADMIN, OPERATOR, FISCAL
-  assignments       Json?
+  role              String     // ADMIN ou OPERATOR
+  assignments       Json?      // Para OPERATOR: { "contractGroup": "Nome do Contrato", "services": ["Serviço A", "Serviço B"] }[]
   records           Record[]
+  resetToken        String?
+  resetTokenExpires DateTime?
   auditLogs         AuditLog[]
-
-  // 🆕 Campos adicionados para recuperação de senha
-  resetToken        String?  @unique        // Token temporário enviado por e-mail
-  resetTokenExpires DateTime?      // Data/hora de expiração do token
 }
 
 // ============================================================
-// MODELO DE REGISTRO (execuções de serviços)
+// MODELO DE REGISTO DE SERVIÇO
 // ============================================================
 model Record {
   id              Int       @id @default(autoincrement())
   operatorId      Int
-  operatorName    String
+  serviceId       Int
   serviceType     String
   serviceUnit     String
   locationId      Int?
@@ -94,20 +93,21 @@ model Record {
   endTime         DateTime?
   beforePhotos    String[]
   afterPhotos     String[]
-  overrideMeasurement Float?
 
   operator        User      @relation(fields: [operatorId], references: [id])
   location        Location? @relation(fields: [locationId], references: [id])
 }
 
-// ============================================================
+// ===========================================================
 // MODELO DE METAS
-// ============================================================
+// ===========================================================
 model Goal {
   id            Int      @id @default(autoincrement())
   contractGroup String
-  month         String
+  month         String   // Formato "YYYY-MM"
   targetArea    Float
+  serviceId     Int      // Adicionado
+  service       Service  @relation(fields: [serviceId], references: [id]) // Adicionado
 }
 
 // ============================================================
@@ -127,11 +127,9 @@ model AuditLog {
   timestamp     DateTime @default(now())
   adminId       Int
   adminUsername String
-  action        String
+  action        String   // Ex: 'CREATE', 'UPDATE', 'DELETE'
   recordId      Int
   details       String
 
   admin         User     @relation(fields: [adminId], references: [id])
 }
-
-
