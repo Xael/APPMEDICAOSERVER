@@ -94,6 +94,7 @@ model Record {
   endTime         DateTime?
   beforePhotos    String[]
   afterPhotos     String[]
+  overrideMeasurement Float?
 
   operator        User      @relation(fields: [operatorId], references: [id])
   location        Location? @relation(fields: [locationId], references: [id])
@@ -132,4 +133,5 @@ model AuditLog {
 
   admin         User     @relation(fields: [adminId], references: [id])
 }
+
 
