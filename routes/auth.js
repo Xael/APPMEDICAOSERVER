@@ -50,28 +50,31 @@ router.get('/me', protect, (req, res) => {
 });
 
 // ==========================================================
-// 📨 SOLICITAR RECUPERAÇÃO DE SENHA
+// 📨 ROTA: Solicitar recuperação de senha
 // ==========================================================
 router.post('/forgot-password', async (req, res) => {
   const { email } = req.body;
-  if (!email) return res.status(400).json({ message: 'Informe um e-mail válido.' });
+  if (!email) {
+    return res.status(400).json({ message: 'Informe um e-mail válido.' });
+  }
 
   try {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      // Resposta genérica (não revelar se o e-mail existe)
-      return res.status(200).json({ message: 'Se o e-mail existir, um link será enviado.' });
+      // resposta genérica (não revela se existe)
+      return res.status(200).json({ message: 'Se o e-mail existir, enviaremos instruções.' });
     }
 
     const token = crypto.randomBytes(32).toString('hex');
-    const expires = new Date(Date.now() + 1000 * 60 * 30); // 30 minutos
+    const expires = new Date(Date.now() + 1000 * 60 * 30); // 30 min
 
     await prisma.user.update({
       where: { email },
       data: { resetToken: token, resetTokenExpires: expires },
     });
 
-    // Configurar transporte de e-mail
+    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
@@ -80,30 +83,28 @@ router.post('/forgot-password', async (req, res) => {
       },
     });
 
-    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-
     await transporter.sendMail({
       from: `"CRB Serviços" <${process.env.MAIL_USER}>`,
       to: email,
-      subject: 'Recuperação de senha - CRB Serviços',
+      subject: 'Redefinição de senha - CRB Serviços',
       html: `
         <p>Olá,</p>
-        <p>Você solicitou redefinir sua senha.</p>
-        <p>Clique no link abaixo para criar uma nova senha (válido por 30 minutos):</p>
+        <p>Você solicitou a redefinição da sua senha.</p>
+        <p>Clique abaixo para definir uma nova senha (válido por 30 minutos):</p>
         <p><a href="${resetLink}" style="color:#352f91;font-weight:bold;">Redefinir senha</a></p>
-        <p>Se você não solicitou essa redefinição, ignore este e-mail.</p>
+        <p>Se você não solicitou, ignore este e-mail.</p>
       `,
     });
 
-    res.status(200).json({ message: 'Se o e-mail existir, um link será enviado.' });
+    res.status(200).json({ message: 'Se o e-mail existir, enviaremos instruções.' });
   } catch (error) {
-    console.error('Erro ao enviar e-mail:', error);
-    res.status(500).json({ message: 'Erro ao enviar e-mail.', error: error.message });
+    console.error('Erro ao enviar e-mail de recuperação:', error);
+    res.status(500).json({ message: 'Erro ao processar solicitação.' });
   }
 });
 
 // ==========================================================
-// 🔄 REDEFINIR SENHA
+// 🔄 ROTA: Redefinir senha
 // ==========================================================
 router.post('/reset-password', async (req, res) => {
   const { token, password } = req.body;
