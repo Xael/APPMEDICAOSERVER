@@ -282,4 +282,43 @@ router.delete('/:id', protect, adminOnly, async (req, res) => {
   }
 });
 
+// Adicione ao final de routes/records.js
+
+// Rota para ADM ajustar a medição de um registro
+router.put('/:id/measurement', protect, adminOnly, async (req, res) => {
+  const recordId = parseInt(req.params.id);
+  const { overrideMeasurement } = req.body;
+
+  if (overrideMeasurement === undefined) {
+    return res.status(400).json({ message: 'Medição ajustada é obrigatória.' });
+  }
+
+  // Converte para número ou null se estiver vazio
+  const valueToSave = overrideMeasurement === '' || overrideMeasurement === null ? null : parseFloat(overrideMeasurement);
+
+  try {
+    const updatedRecord = await prisma.record.update({
+      where: { id: recordId },
+      data: {
+        overrideMeasurement: valueToSave
+      },
+    });
+
+    // Opcional: Adicionar ao log de auditoria
+    await prisma.auditLog.create({
+      data: {
+        adminId: req.user.id,
+        adminUsername: req.user.name,
+        action: 'ADJUST_MEASUREMENT',
+        recordId: recordId,
+        details: `Medição ajustada para ${valueToSave === null ? 'padrão' : valueToSave}. Valor original: ${updatedRecord.locationArea}.`,
+      },
+    });
+
+    res.json(updatedRecord);
+  } catch (error) {
+    res.status(500).json({ message: 'Erro ao atualizar a medição.', error: error.message });
+  }
+});
+
 module.exports = router;
