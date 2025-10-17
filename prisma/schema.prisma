@@ -40,6 +40,7 @@ model Location {
   name      String
   lat       Float?
   lng       Float?
+  observations String?  
 
   records   Record[]
   services  LocationService[]
@@ -133,3 +134,4 @@ model AuditLog {
 
   admin         User     @relation(fields: [adminId], references: [id])
 }
+
