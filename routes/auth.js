@@ -73,7 +73,10 @@ router.post('/forgot-password', async (req, res) => {
       data: { resetToken: token, resetTokenExpires: expires },
     });
 
-    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+    // --- LINHA CORRIGIDA AQUI ---
+    const baseUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, ''); // Garante que não haja barra no final
+    const resetLink = `${baseUrl}/reset-password?token=${token}`;
+    // --- FIM DA CORREÇÃO ---
 
     const transporter = nodemailer.createTransport({
       service: 'gmail',
