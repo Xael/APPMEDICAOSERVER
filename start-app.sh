@@ -1,17 +1,28 @@
 #!/bin/sh
 
-echo "Aguardando o banco de dados..."
-# Tenta se conectar ao banco por um tempo antes de falhar
-/usr/src/app/node_modules/.bin/prisma migrate deploy --skip-generate --preview-feature || echo "Aviso: Nenhuma migração para aplicar (usando db push como fallback)"
+# Caminho absoluto para o binário do Prisma (garante que seja encontrado)
+PRISMA_BIN="./node_modules/.bin/prisma"
 
-# Força a sincronização do schema com o banco (cria colunas que faltam)
-echo "Sincronizando o Schema do Prisma com o Banco (db push)..."
-/usr/src/app/node_modules/.bin/prisma db push --accept-data-loss
+# 1. Espera pelo Banco de Dados estar pronto para conexões Prisma
+# Isso é crucial para ambientes orquestrados onde o healthcheck pode ser otimista.
+echo "Aguardando o Banco de Dados (DB) antes da migração..."
+sleep 5 # Dá um tempo extra para o PostgreSQL estar pronto para conexões de alto nível.
 
-# Executa o seed do banco (popula dados iniciais, como admin)
+# 2. Força a sincronização do schema com o banco (cria colunas que faltam)
+# O `db push` é usado para garantir que o banco reflita o schema.prisma.
+echo "Forçando Sincronização do Schema (db push)..."
+$PRISMA_BIN db push --accept-data-loss || { 
+  echo "ERRO CRÍTICO: db push falhou. Verifique DATABASE_URL e logs do DB."
+  exit 1
+}
+
+# 3. Executa o seed do banco (popula dados iniciais, como admin)
 echo "Executando o Seed..."
-/usr/src/app/node_modules/.bin/prisma db seed
+$PRISMA_BIN db seed || { 
+  echo "Aviso: db seed falhou (pode ser esperado se o seed já rodou)."
+  # Não vamos falhar aqui, mas é bom logar.
+}
 
-# Inicia o servidor Node.js
+# 4. Inicia o servidor Node.js
 echo "Iniciando o Servidor Node.js..."
 exec node server.js
