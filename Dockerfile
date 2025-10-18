@@ -29,4 +29,3 @@ ENV NODE_ENV=production
 # 5. Comando de Inicialização (CMD)
 # Usamos o script para garantir a sequência correta de migração/push, seed e start.
 CMD ["./start-app.sh"]
-
