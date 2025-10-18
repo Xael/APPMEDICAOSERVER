@@ -19,26 +19,27 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // ==========================================================
-// 📄 GET / - Rota para buscar todos os registros
+// 📄 GET / - Rota para buscar todos os registros (CORRIGIDA)
 // ==========================================================
 router.get('/', protect, async (req, res) => {
   try {
     const records = await prisma.record.findMany({
       orderBy: { startTime: 'desc' },
       include: {
-        operator: { select: { name: true } },
-        location: { select: { observations: true } }, // Inclui as observações do local
+        // Incluímos 'location' para pegar as observações
+        location: { select: { observations: true } },
       },
     });
 
-    // Formata a resposta para incluir o nome do operador e as observações no objeto principal
-    const formattedRecords = records.map(r => {
-        const { operator, location, ...rest } = r; // Desestrutura para remover os objetos aninhados
-        return {
-            ...rest,
-            operatorName: operator?.name || 'Operador Deletado',
-            observations: location?.observations || null,
-        };
+    // Mapeamos os resultados para incluir as observações no objeto principal
+    const formattedRecords = records.map(record => {
+      // O 'operatorName' já está salvo no próprio registro,
+      // então não precisamos mais buscar na tabela de usuários.
+      const { location, ...rest } = record;
+      return {
+        ...rest,
+        observations: location?.observations || null,
+      };
     });
 
     res.json(formattedRecords);
@@ -49,7 +50,7 @@ router.get('/', protect, async (req, res) => {
 });
 
 // ==========================================================
-// 📄 GET /:id - Rota para buscar um único registro
+// 📄 GET /:id - Rota para buscar um único registro (CORRIGIDA)
 // ==========================================================
 router.get('/:id', protect, async (req, res) => {
     try {
@@ -61,7 +62,6 @@ router.get('/:id', protect, async (req, res) => {
         const record = await prisma.record.findUnique({
             where: { id: recordId },
             include: {
-                operator: { select: { name: true } },
                 location: { select: { observations: true } },
             },
         });
@@ -69,11 +69,11 @@ router.get('/:id', protect, async (req, res) => {
         if (!record) {
             return res.status(404).json({ message: 'Registro não encontrado' });
         }
-
-        const { operator, location, ...rest } = record;
+        
+        // Lógica simplificada igual à da rota principal
+        const { location, ...rest } = record;
         const formattedRecord = {
             ...rest,
-            operatorName: operator?.name || 'Operador Deletado',
             observations: location?.observations || null,
         };
 
@@ -132,7 +132,7 @@ router.post('/', protect, async (req, res) => {
                 gpsUsed: Boolean(gpsUsed),
                 startTime: new Date(startTime),
                 operator: { connect: { id: operator.id } },
-                operatorName: operator.name,
+                operatorName: operator.name, // Salva o nome do operador diretamente
                 location: finalLocationId ? { connect: { id: parseInt(finalLocationId) } } : undefined,
             },
         });
@@ -255,8 +255,10 @@ router.delete('/:id', protect, adminOnly, async (req, res) => {
         const photosToDelete = [...record.beforePhotos, ...record.afterPhotos];
         for (const photoPath of photosToDelete) {
             try {
+                // Constrói o caminho absoluto do arquivo para exclusão
                 await fs.unlink(path.join(__dirname, '..', photoPath));
             } catch (fileErr) {
+                // Loga o erro mas continua o processo se um arquivo não for encontrado
                 console.error(`Falha ao deletar arquivo ${photoPath}:`, fileErr.message);
             }
         }
