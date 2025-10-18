@@ -86,14 +86,19 @@ router.get('/:id', protect, async (req, res) => {
 
 
 // ==========================================================
-// ➕ POST / - Rota para CRIAR um novo registro (offline-first)
+// ➕ POST / - Rota para CRIAR um novo registro (CORRIGIDA)
 // ==========================================================
 router.post('/', protect, async (req, res) => {
     const {
         operatorId, serviceType, serviceUnit, locationName, contractGroup,
-        locationArea, gpsUsed, startTime, newLocationInfo
+        locationArea, gpsUsed, startTime, newLocationInfo, serviceId // <-- serviceId adicionado aqui
     } = req.body;
     let finalLocationId = req.body.locationId;
+
+    // Validação para garantir que o serviceId foi enviado
+    if (!serviceId) {
+        return res.status(400).json({ message: "O 'serviceId' é obrigatório." });
+    }
 
     try {
         const operator = await prisma.user.findUnique({ where: { id: parseInt(operatorId) } });
@@ -121,7 +126,7 @@ router.post('/', protect, async (req, res) => {
             finalLocationId = newLocation.id;
         }
 
-        // Cria o registro, conectando ao local se houver um ID
+        // Cria o registro, agora incluindo o serviceId
         const newRecord = await prisma.record.create({
             data: {
                 serviceType,
@@ -132,8 +137,9 @@ router.post('/', protect, async (req, res) => {
                 gpsUsed: Boolean(gpsUsed),
                 startTime: new Date(startTime),
                 operator: { connect: { id: operator.id } },
-                operatorName: operator.name, // Salva o nome do operador diretamente
+                operatorName: operator.name,
                 location: finalLocationId ? { connect: { id: parseInt(finalLocationId) } } : undefined,
+                serviceId: parseInt(serviceId), // <-- ALTERAÇÃO AQUI
             },
         });
 
