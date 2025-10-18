@@ -26,20 +26,20 @@ router.get('/', protect, async (req, res) => {
     const records = await prisma.record.findMany({
       orderBy: { startTime: 'desc' },
       include: {
-        // Incluímos 'location' para pegar as observações
+        // A busca pelo operador foi removida para evitar erros.
+        // Usaremos o `operatorName` que já está salvo no registro.
         location: { select: { observations: true } },
       },
     });
 
-    // Mapeamos os resultados para incluir as observações no objeto principal
-    const formattedRecords = records.map(record => {
-      // O 'operatorName' já está salvo no próprio registro,
-      // então não precisamos mais buscar na tabela de usuários.
-      const { location, ...rest } = record;
-      return {
-        ...rest,
-        observations: location?.observations || null,
-      };
+    const formattedRecords = records.map(r => {
+        const { location, ...rest } = r;
+        return {
+            ...rest,
+            // Garante que o nome do operador sempre exista.
+            operatorName: r.operatorName || 'Operador Deletado',
+            observations: location?.observations || null,
+        };
     });
 
     res.json(formattedRecords);
@@ -69,11 +69,11 @@ router.get('/:id', protect, async (req, res) => {
         if (!record) {
             return res.status(404).json({ message: 'Registro não encontrado' });
         }
-        
-        // Lógica simplificada igual à da rota principal
+
         const { location, ...rest } = record;
         const formattedRecord = {
             ...rest,
+            operatorName: record.operatorName || 'Operador Deletado',
             observations: location?.observations || null,
         };
 
@@ -86,16 +86,15 @@ router.get('/:id', protect, async (req, res) => {
 
 
 // ==========================================================
-// ➕ POST / - Rota para CRIAR um novo registro (CORRIGIDA)
+// ➕ POST / - Rota para CRIAR um novo registro
 // ==========================================================
 router.post('/', protect, async (req, res) => {
     const {
         operatorId, serviceType, serviceUnit, locationName, contractGroup,
-        locationArea, gpsUsed, startTime, newLocationInfo, serviceId // <-- serviceId adicionado aqui
+        locationArea, gpsUsed, startTime, newLocationInfo, serviceId
     } = req.body;
     let finalLocationId = req.body.locationId;
 
-    // Validação para garantir que o serviceId foi enviado
     if (!serviceId) {
         return res.status(400).json({ message: "O 'serviceId' é obrigatório." });
     }
@@ -106,7 +105,6 @@ router.post('/', protect, async (req, res) => {
             return res.status(404).json({ message: "Operador não encontrado" });
         }
 
-        // Se for um novo local, cria ele primeiro
         if (newLocationInfo && newLocationInfo.name) {
             const newLocation = await prisma.location.create({
                 data: {
@@ -126,20 +124,16 @@ router.post('/', protect, async (req, res) => {
             finalLocationId = newLocation.id;
         }
 
-        // Cria o registro, agora incluindo o serviceId
         const newRecord = await prisma.record.create({
             data: {
-                serviceType,
-                serviceUnit,
-                locationName,
-                contractGroup,
+                serviceType, serviceUnit, locationName, contractGroup,
                 locationArea: parseFloat(locationArea),
                 gpsUsed: Boolean(gpsUsed),
                 startTime: new Date(startTime),
+                operatorName: operator.name, // Salva o nome para referência futura
                 operator: { connect: { id: operator.id } },
-                operatorName: operator.name,
                 location: finalLocationId ? { connect: { id: parseInt(finalLocationId) } } : undefined,
-                serviceId: parseInt(serviceId), // <-- ALTERAÇÃO AQUI
+                serviceId: parseInt(serviceId),
             },
         });
 
@@ -152,33 +146,30 @@ router.post('/', protect, async (req, res) => {
 });
 
 // ==========================================================
-// 📸 POST /:id/photos - Rota para UPLOAD de fotos
+// 📸 POST /:id/photos - Rota para UPLOAD de fotos (MELHORADA)
 // ==========================================================
 router.post('/:id/photos', protect, upload.array('files'), async (req, res) => {
     const { phase } = req.body;
-    const recordIdOrTempId = req.params.id;
+    const recordId = parseInt(req.params.id, 10);
 
-    if (!req.files || req.files.length === 0 || !['BEFORE', 'AFTER'].includes(phase)) {
+    if (isNaN(recordId) || !req.files || req.files.length === 0 || !['BEFORE', 'AFTER'].includes(phase)) {
         return res.status(400).json({ message: 'Dados inválidos para upload de fotos.' });
     }
 
     try {
-        const recordId = parseInt(recordIdOrTempId, 10);
-        if (isNaN(recordId)) {
-            // Se não for um número, é um tempId. Ignoramos por enquanto,
-            // pois o syncManager vai reenviar com o ID correto.
-            return res.status(200).json({ message: "Upload recebido para tempId, aguardando ID final." });
-        }
-
         const record = await prisma.record.findUnique({ where: { id: recordId } });
         if (!record) {
+            // Se o registro não for encontrado, deleta os arquivos que foram enviados
+            req.files.forEach(file => fs.unlink(file.path).catch(err => console.error("Erro ao limpar arquivo órfão:", err)));
             return res.status(404).json({ message: 'Registro não encontrado para associar fotos.' });
         }
 
         const photoPaths = req.files.map(file => `/uploads/${file.filename}`);
+
+        // Lógica mais segura: busca o array existente, adiciona os novos e salva.
         const dataToUpdate = phase === 'BEFORE'
-            ? { beforePhotos: { push: photoPaths } }
-            : { afterPhotos: { push: photoPaths }, endTime: new Date() };
+            ? { beforePhotos: [...record.beforePhotos, ...photoPaths] }
+            : { afterPhotos: [...record.afterPhotos, ...photoPaths], endTime: new Date() };
 
         const updatedRecord = await prisma.record.update({
             where: { id: recordId },
@@ -257,14 +248,11 @@ router.delete('/:id', protect, adminOnly, async (req, res) => {
         const record = await prisma.record.findUnique({ where: { id: recordId } });
         if (!record) return res.status(404).json({ message: 'Registro não encontrado' });
 
-        // Deleta os arquivos de imagem associados
         const photosToDelete = [...record.beforePhotos, ...record.afterPhotos];
         for (const photoPath of photosToDelete) {
             try {
-                // Constrói o caminho absoluto do arquivo para exclusão
                 await fs.unlink(path.join(__dirname, '..', photoPath));
             } catch (fileErr) {
-                // Loga o erro mas continua o processo se um arquivo não for encontrado
                 console.error(`Falha ao deletar arquivo ${photoPath}:`, fileErr.message);
             }
         }
@@ -277,6 +265,5 @@ router.delete('/:id', protect, adminOnly, async (req, res) => {
         res.status(500).json({ message: 'Erro ao excluir registro', error: error.message });
     }
 });
-
 
 module.exports = router;
