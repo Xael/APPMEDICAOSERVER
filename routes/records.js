@@ -104,12 +104,51 @@ router.post('/', protect, async (req, res) => {
 });
 
 // ==========================================================
-// 📸 POST /:id/photos - Rota para UPLOAD de fotos
+// 📸 POST /:id/photos - Rota para UPLOAD de fotos (VERSÃO CORRIGIDA)
 // ==========================================================
 router.post('/:id/photos', protect, upload.array('files'), async (req, res) => {
-    // ... (código existente sem alteração)
-});
+    const { phase } = req.body;
+    const recordIdOrTempId = req.params.id; // Aceita tanto o ID final quanto o temporário
 
+    if (!req.files || req.files.length === 0 || !['BEFORE', 'AFTER'].includes(phase)) {
+        return res.status(400).json({ message: 'Dados inválidos para upload de fotos.' });
+    }
+
+    try {
+        const recordId = parseInt(recordIdOrTempId, 10);
+
+        // Se o ID não for um número, significa que é um ID temporário do syncManager.
+        // O app está offline e vai tentar sincronizar mais tarde.
+        if (isNaN(recordId)) {
+            // Apenas confirmamos o recebimento. O syncManager cuidará do resto.
+            return res.status(200).json({ message: "Upload recebido para ID temporário, aguardando ID final." });
+        }
+
+        const record = await prisma.record.findUnique({ where: { id: recordId } });
+        if (!record) {
+            // Se o registro não for encontrado, deleta os arquivos órfãos que foram enviados
+            req.files.forEach(file => fs.unlink(file.path).catch(err => console.error("Erro ao limpar arquivo órfão:", err)));
+            return res.status(404).json({ message: 'Registro não encontrado para associar fotos.' });
+        }
+
+        const photoPaths = req.files.map(file => `/uploads/${file.filename}`);
+
+        // Lógica segura para adicionar fotos ao array existente
+        const dataToUpdate = phase === 'BEFORE'
+            ? { beforePhotos: [...record.beforePhotos, ...photoPaths] }
+            : { afterPhotos: [...record.afterPhotos, ...photoPaths], endTime: new Date() };
+
+        const updatedRecord = await prisma.record.update({
+            where: { id: recordId },
+            data: dataToUpdate,
+        });
+
+        res.status(200).json(updatedRecord);
+    } catch (error) {
+        console.error("Erro no upload de fotos:", error);
+        res.status(500).json({ message: 'Erro no upload de fotos', error: error.message });
+    }
+});
 
 // ==========================================================
 // ✏️ PUT /:id - Rota para ATUALIZAR um registro (COM AUDITORIA)
