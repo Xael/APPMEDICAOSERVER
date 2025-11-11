@@ -35,17 +35,18 @@ model Service {
 // MODELO DE LOCAL (COM HIERARQUIA)
 // ============================================================
 model Location {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   city         String
   name         String
   lat          Float?
   lng          Float?
   observations String?
+  isGroup      Boolean?  @default(false) // Distingue se é um agrupador (Bairro)
 
   // Relacionamento Pai-Filho (Bairro -> Rua)
   parentId Int?
-  parent   Location?  @relation("LocationHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
-  children Location[] @relation("LocationHierarchy")
+  parent   Location?   @relation("LocationHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children Location[]  @relation("LocationHierarchy")
 
   records  Record[]
   services LocationService[]
