@@ -26,10 +26,11 @@ router.get('/', protect, async (req, res) => {
 
     // Formata a resposta para o frontend
     const formattedLocations = locations.map(loc => {
-      const { city, services, parentId, ...rest } = loc;
+      const { city, services, parentId, isGroup, ...rest } = loc;
       return {
         ...rest,
         parentId,
+        isGroup,
         contractGroup: city,
         // Agora 'services' é um array de objetos com todos os detalhes
         services: services.map(ls => ({
@@ -51,7 +52,7 @@ router.get('/', protect, async (req, res) => {
 // Create a new location
 router.post('/', protect, async (req, res) => {
   // O frontend agora envia 'services' com 'service_id' e 'measurement'
-  const { city, name, lat, lng, services, parentId, observations } = req.body;
+  const { city, name, lat, lng, services, parentId, observations, isGroup } = req.body;
   
   if (!Array.isArray(services)) {
     return res.status(400).json({ message: 'Services must be an array.' });
@@ -65,6 +66,7 @@ router.post('/', protect, async (req, res) => {
         observations,
         lat,
         lng,
+        isGroup: isGroup || false,
         parentId: parentId ? parseInt(parentId, 10) : null,
         services: {
           create: services.map(s => ({
@@ -83,7 +85,7 @@ router.post('/', protect, async (req, res) => {
 
 // Update a location
 router.put('/:id', protect, adminOnly, async (req, res) => {
-  const { city, name, lat, lng, services, parentId, observations } = req.body;
+  const { city, name, lat, lng, services, parentId, observations, isGroup } = req.body;
   const locationId = parseInt(req.params.id);
 
   if (!Array.isArray(services)) {
@@ -104,6 +106,7 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
           observations,
           lat,
           lng,
+          isGroup: isGroup,
           parentId: parentId ? parseInt(parentId, 10) : null,
           services: {
             create: services.map(s => ({
