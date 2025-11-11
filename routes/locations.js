@@ -26,9 +26,10 @@ router.get('/', protect, async (req, res) => {
 
     // Formata a resposta para o frontend
     const formattedLocations = locations.map(loc => {
-      const { city, services, ...rest } = loc;
+      const { city, services, parentId, ...rest } = loc;
       return {
         ...rest,
+        parentId,
         contractGroup: city,
         // Agora 'services' é um array de objetos com todos os detalhes
         services: services.map(ls => ({
@@ -50,7 +51,7 @@ router.get('/', protect, async (req, res) => {
 // Create a new location
 router.post('/', protect, async (req, res) => {
   // O frontend agora envia 'services' com 'service_id' e 'measurement'
-  const { city, name, lat, lng, services } = req.body;
+  const { city, name, lat, lng, services, parentId, observations } = req.body;
   
   if (!Array.isArray(services)) {
     return res.status(400).json({ message: 'Services must be an array.' });
@@ -61,8 +62,10 @@ router.post('/', protect, async (req, res) => {
       data: {
         city,
         name,
+        observations,
         lat,
         lng,
+        parentId: parentId ? parseInt(parentId, 10) : null,
         services: {
           create: services.map(s => ({
             measurement: parseFloat(s.measurement),
@@ -80,7 +83,7 @@ router.post('/', protect, async (req, res) => {
 
 // Update a location
 router.put('/:id', protect, adminOnly, async (req, res) => {
-  const { city, name, lat, lng, services } = req.body;
+  const { city, name, lat, lng, services, parentId, observations } = req.body;
   const locationId = parseInt(req.params.id);
 
   if (!Array.isArray(services)) {
@@ -98,8 +101,10 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
         data: {
           city,
           name,
+          observations,
           lat,
           lng,
+          parentId: parentId ? parseInt(parentId, 10) : null,
           services: {
             create: services.map(s => ({
               measurement: parseFloat(s.measurement),
@@ -123,12 +128,16 @@ router.delete('/:id', protect, adminOnly, async (req, res) => {
     const locationId = parseInt(req.params.id);
     // Graças ao 'onDelete: Cascade' no schema, deletar o local
     // irá deletar automaticamente as entradas em 'LocationService'
+    // E também as ruas filhas
     await prisma.location.delete({
       where: { id: locationId },
     });
     res.status(204).send();
   } catch (error) {
     console.error("Error deleting location:", error);
+     if (error.code === 'P2003') { // Foreign key constraint failed
+      return res.status(400).json({ message: 'Não é possível excluir este local pois ele possui registros de serviço ou ruas associadas.' });
+    }
     res.status(500).json({ message: 'Error deleting location', error: error.message });
   }
 });
