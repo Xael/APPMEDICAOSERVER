@@ -80,7 +80,7 @@ router.get('/:id', protect, async (req, res) => {
 router.post('/', protect, async (req, res) => {
     const {
         operatorId, serviceType, serviceUnit, locationName, contractGroup,
-        locationArea, gpsUsed, startTime, newLocationInfo, serviceId
+        locationArea, gpsUsed, startTime, newLocationInfo, serviceId, serviceOrderNumber
     } = req.body;
     let finalLocationId = req.body.locationId;
     if (!serviceId || !operatorId) return res.status(400).json({ message: "Os campos 'serviceId' e 'operatorId' são obrigatórios." });
@@ -95,7 +95,22 @@ router.post('/', protect, async (req, res) => {
             const locationExists = await prisma.location.findUnique({ where: { id: parseInt(finalLocationId) } });
             if (!locationExists) return res.status(404).json({ message: `Erro de sincronização: O local com ID ${finalLocationId} não foi encontrado.` });
         }
-        const newRecord = await prisma.record.create({ data: { serviceType, serviceUnit, locationName, contractGroup, locationArea: parseFloat(locationArea), gpsUsed: Boolean(gpsUsed), startTime: new Date(startTime), operatorName: operator.name, operator: { connect: { id: operator.id } }, location: finalLocationId ? { connect: { id: parseInt(finalLocationId) } } : undefined, serviceId: parseInt(serviceId) } });
+        const newRecord = await prisma.record.create({ 
+            data: { 
+                serviceType, 
+                serviceUnit, 
+                locationName, 
+                contractGroup, 
+                locationArea: parseFloat(locationArea), 
+                gpsUsed: Boolean(gpsUsed), 
+                startTime: new Date(startTime),
+                serviceOrderNumber, 
+                operatorName: operator.name, 
+                operator: { connect: { id: operator.id } }, 
+                location: finalLocationId ? { connect: { id: parseInt(finalLocationId) } } : undefined, 
+                serviceId: parseInt(serviceId) 
+            } 
+        });
         res.status(201).json(newRecord);
     } catch (error) {
         if (error.code === 'P2025') return res.status(404).json({ message: 'Erro: Um dos registros relacionados não foi encontrado.', details: error.meta.cause });
@@ -161,10 +176,10 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
         const originalRecord = await prisma.record.findUnique({ where: { id: recordId } });
         if (!originalRecord) return res.status(404).json({ message: 'Registro original não encontrado.' });
         
-        const { beforePhotos, afterPhotos, ...dataToUpdate } = req.body;
+        const { beforePhotos, afterPhotos, serviceOrderNumber, ...dataToUpdate } = req.body;
         const updatedRecord = await prisma.record.update({
             where: { id: recordId },
-            data: { ...dataToUpdate, startTime: dataToUpdate.startTime ? new Date(dataToUpdate.startTime) : undefined, endTime: dataToUpdate.endTime ? new Date(dataToUpdate.endTime) : undefined, beforePhotos, afterPhotos },
+            data: { ...dataToUpdate, serviceOrderNumber, startTime: dataToUpdate.startTime ? new Date(dataToUpdate.startTime) : undefined, endTime: dataToUpdate.endTime ? new Date(dataToUpdate.endTime) : undefined, beforePhotos, afterPhotos },
         });
 
         // <-- INÍCIO DA AUDITORIA -->
