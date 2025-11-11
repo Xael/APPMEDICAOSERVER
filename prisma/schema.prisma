@@ -13,37 +13,42 @@ datasource db {
 // MODELO DE UNIDADE DE MEDIDA
 // ============================================================
 model Unit {
-  id        Int       @id @default(autoincrement())
-  name      String    // Ex: "Metros Quadrados", "Horas", "Quantidade"
-  symbol    String    // Ex: "m²", "h", "qtd"
-  services  Service[]
+  id       Int       @id @default(autoincrement())
+  name     String
+  symbol   String
+  services Service[]
 }
 
 // ============================================================
 // MODELO DE SERVIÇO
 // ============================================================
 model Service {
-  id        Int       @id @default(autoincrement())
-  name      String    @unique
+  id        Int               @id @default(autoincrement())
+  name      String            @unique
   unitId    Int
-  unit      Unit      @relation(fields: [unitId], references: [id])
+  unit      Unit              @relation(fields: [unitId], references: [id], onDelete: Restrict) // Evita excluir unidade em uso
   locations LocationService[]
-  goals     Goal[] // Adicionado
+  goals     Goal[]
 }
 
 // ============================================================
-// MODELO DE LOCAL
+// MODELO DE LOCAL (COM HIERARQUIA)
 // ============================================================
 model Location {
-  id        Int      @id @default(autoincrement())
-  city      String   // O frontend chama isso de 'contractGroup'
-  name      String
-  lat       Float?
-  lng       Float?
-  observations String?  
+  id           Int      @id @default(autoincrement())
+  city         String
+  name         String
+  lat          Float?
+  lng          Float?
+  observations String?
 
-  records   Record[]
-  services  LocationService[]
+  // Relacionamento Pai-Filho (Bairro -> Rua)
+  parentId Int?
+  parent   Location?  @relation("LocationHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children Location[] @relation("LocationHierarchy")
+
+  records  Record[]
+  services LocationService[]
 }
 
 // ============================================================
@@ -54,8 +59,8 @@ model LocationService {
   serviceId   Int
   measurement Float
 
-  location    Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  service  Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
   @@id([locationId, serviceId])
 }
@@ -68,8 +73,8 @@ model User {
   email             String     @unique
   name              String
   password          String
-  role              String     // ADMIN ou OPERATOR
-  assignments       Json?      // Para OPERATOR: { "contractGroup": "Nome do Contrato", "services": ["Serviço A", "Serviço B"] }[]
+  role              String     // ADMIN, OPERATOR, FISCAL
+  assignments       Json?
   records           Record[]
   resetToken        String?
   resetTokenExpires DateTime?
@@ -77,48 +82,51 @@ model User {
 }
 
 // ============================================================
-// MODELO DE REGISTO DE SERVIÇO
+// MODELO DE REGISTO DE SERVIÇO (COM ORDEM DE SERVIÇO)
 // ============================================================
 model Record {
-  id              Int       @id @default(autoincrement())
-  operatorId      Int
-  serviceId       Int
-  serviceType     String
-  serviceUnit     String
-  locationId      Int?
-  locationName    String
-  contractGroup   String
-  locationArea    Float?
-  gpsUsed         Boolean
-  startTime       DateTime
-  endTime         DateTime?
-  beforePhotos    String[]
-  afterPhotos     String[]
-  operatorName    String
+  id                  Int       @id @default(autoincrement())
+  operatorId          Int?      // Alterado para opcional para não perder histórico
+  serviceId           Int
+  serviceType         String
+  serviceUnit         String
+  locationId          Int?      // Alterado para opcional para não perder histórico
+  locationName        String
+  contractGroup       String
+  locationArea        Float?
+  overrideMeasurement Float?    // Medição ajustada pelo Admin
+  gpsUsed             Boolean
+  startTime           DateTime
+  endTime             DateTime?
+  beforePhotos        String[]
+  afterPhotos         String[]
+  operatorName        String
+  serviceOrderNumber  String?   // Novo campo para Ordem de Serviço
 
-  operator        User      @relation(fields: [operatorId], references: [id])
-  location        Location? @relation(fields: [locationId], references: [id])
+  // onDelete: SetNull preserva o histórico se um operador ou local for excluído
+  operator User?     @relation(fields: [operatorId], references: [id], onDelete: SetNull)
+  location Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
 }
 
 // ===========================================================
 // MODELO DE METAS
 // ===========================================================
 model Goal {
-  id            Int      @id @default(autoincrement())
+  id            Int     @id @default(autoincrement())
   contractGroup String
-  month         String   // Formato "YYYY-MM"
+  month         String
   targetArea    Float
-  serviceId     Int      // Adicionado
-  service       Service  @relation(fields: [serviceId], references: [id]) // Adicionado
+  serviceId     Int
+  service       Service @relation(fields: [serviceId], references: [id], onDelete: Cascade) // Se o serviço for deletado, a meta também é
 }
 
 // ============================================================
 // CONFIGURAÇÕES DE CONTRATO
 // ============================================================
 model ContractConfig {
-  id             Int    @id @default(autoincrement())
-  contractGroup  String @unique
-  cycleStartDay  Int
+  id            Int    @id @default(autoincrement())
+  contractGroup String @unique
+  cycleStartDay Int
 }
 
 // ============================================================
@@ -129,11 +137,9 @@ model AuditLog {
   timestamp     DateTime @default(now())
   adminId       Int
   adminUsername String
-  action        String   // Ex: 'CREATE', 'UPDATE', 'DELETE'
-  recordId      Int
+  action        String
+  recordId      Int?     // Alterado para opcional
   details       String
 
-  admin         User     @relation(fields: [adminId], references: [id])
+  admin User @relation(fields: [adminId], references: [id], onDelete: Restrict) // Evita excluir admin com logs
 }
-
-
