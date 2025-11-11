@@ -51,7 +51,6 @@ router.get('/', protect, async (req, res) => {
 
 // Create a new location
 router.post('/', protect, async (req, res) => {
-  // O frontend agora envia 'services' com 'service_id' e 'measurement'
   const { city, name, lat, lng, services, parentId, observations, isGroup } = req.body;
   
   if (!Array.isArray(services)) {
@@ -66,7 +65,7 @@ router.post('/', protect, async (req, res) => {
         observations,
         lat,
         lng,
-        isGroup: isGroup || false,
+        isGroup: isGroup === true, // Garante que seja um booleano
         parentId: parentId ? parseInt(parentId, 10) : null,
         services: {
           create: services.map(s => ({
@@ -93,21 +92,27 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
   }
 
   try {
-    // Transação para garantir consistência: deleta os antigos e cria os novos
+    const updateData = {
+        city,
+        name,
+        observations,
+        lat,
+        lng,
+        parentId: parentId ? parseInt(parentId, 10) : null,
+    };
+
+    // Apenas inclui `isGroup` no objeto de atualização se for um booleano.
+    // Isso evita que o campo seja acidentalmente setado para null se não for enviado.
+    if (typeof isGroup === 'boolean') {
+        updateData.isGroup = isGroup;
+    }
+
     const transaction = await prisma.$transaction([
-      // 1. Deleta todas as medições antigas para este local
       prisma.locationService.deleteMany({ where: { locationId: locationId } }),
-      // 2. Atualiza os dados do local e cria as novas medições
       prisma.location.update({
         where: { id: locationId },
         data: {
-          city,
-          name,
-          observations,
-          lat,
-          lng,
-          isGroup: isGroup,
-          parentId: parentId ? parseInt(parentId, 10) : null,
+          ...updateData,
           services: {
             create: services.map(s => ({
               measurement: parseFloat(s.measurement),
@@ -118,7 +123,7 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
       })
     ]);
     
-    res.json(transaction[1]); // Retorna o resultado da operação de update
+    res.json(transaction[1]);
   } catch (error) {
     console.error("Error updating location:", error);
     res.status(500).json({ message: 'Error updating location', error: error.message });
@@ -129,16 +134,13 @@ router.put('/:id', protect, adminOnly, async (req, res) => {
 router.delete('/:id', protect, adminOnly, async (req, res) => {
   try {
     const locationId = parseInt(req.params.id);
-    // Graças ao 'onDelete: Cascade' no schema, deletar o local
-    // irá deletar automaticamente as entradas em 'LocationService'
-    // E também as ruas filhas
     await prisma.location.delete({
       where: { id: locationId },
     });
     res.status(204).send();
   } catch (error) {
     console.error("Error deleting location:", error);
-     if (error.code === 'P2003') { // Foreign key constraint failed
+     if (error.code === 'P2003') { 
       return res.status(400).json({ message: 'Não é possível excluir este local pois ele possui registros de serviço ou ruas associadas.' });
     }
     res.status(500).json({ message: 'Error deleting location', error: error.message });
